@@ -1,0 +1,1555 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Notice Management System API",
+        "description": "API documentation for frontend devs",
+        "contact": {
+            "email": "nadim.hossain193@email.com"
+        },
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/auth/login": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Login",
+                "description": "Login with email and password to get API token",
+                "operationId": "81bccbacfa590c995286df0450599426",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "email",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "example": "user@example.com"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "example": "secret123"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Login successful",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "token": {
+                                            "type": "string",
+                                            "example": "1|abcd1234tokenstring"
+                                        },
+                                        "user": {
+                                            "$ref": "#/components/schemas/User"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized / Invalid credentials",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "The given data was invalid."
+                                        },
+                                        "errors": {
+                                            "properties": {
+                                                "email": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "example": "The email field is required."
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Logout",
+                "description": "Revoke the user's API token and logout. Requires authentication.",
+                "operationId": "a7acbb1842a2e33e942de1a08983f806",
+                "responses": {
+                    "200": {
+                        "description": "Logout successful",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Logged out successfully."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - if not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/notices": {
+            "get": {
+                "tags": [
+                    "Notice"
+                ],
+                "summary": "List all notices",
+                "description": "Returns a list of all notices",
+                "operationId": "cc7a599ff650d15b5b25c494d90ad574",
+                "responses": {
+                    "200": {
+                        "description": "A list of notices",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Notice"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Notice"
+                ],
+                "summary": "Create a new notice (with internal/external users, attachments, draft/publish)",
+                "description": "Creates a new notice. You may optionally assign to multiple internal users (by user IDs) or external users (name & email), and upload multiple attachments. Set 'status' to 'draft' or 'published'.",
+                "operationId": "storeNotice",
+                "requestBody": {
+                    "description": "Notice creation payload. For file upload, use multipart/form-data.",
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "title",
+                                    "description"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "description": "Notice headline/title (required, max 255 chars).",
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "Meeting on Friday"
+                                    },
+                                    "description": {
+                                        "description": "Main content/body of the notice (required).",
+                                        "type": "string",
+                                        "example": "There will be a meeting in the main hall at 10am."
+                                    },
+                                    "internal_users": {
+                                        "description": "Optional array of internal user IDs (must exist in users table).",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "integer",
+                                            "example": 5
+                                        }
+                                    },
+                                    "external_users": {
+                                        "description": "Optional array of objects for external users (name & email required).",
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "name",
+                                                "email"
+                                            ],
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string",
+                                                    "example": "John Doe"
+                                                },
+                                                "email": {
+                                                    "type": "string",
+                                                    "format": "email",
+                                                    "example": "john@example.com"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "status": {
+                                        "description": "Set as 'draft' to save as draft, or 'published' to send immediately. Default: published.",
+                                        "type": "string",
+                                        "enum": [
+                                            "draft",
+                                            "published"
+                                        ],
+                                        "example": "draft"
+                                    },
+                                    "priority_level": {
+                                        "description": "Priority level (optional, e.g., high, normal, low)",
+                                        "type": "string",
+                                        "example": "high"
+                                    },
+                                    "attachments": {
+                                        "description": "Optional multiple files: PDF, DOC, DOCX, XLSX, XLS, JPG, JPEG, PNG (10MB max each).",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "format": "binary"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Notice created successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Notice created successfully."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "title": {
+                                                    "type": "string",
+                                                    "example": "Meeting on Friday"
+                                                },
+                                                "description": {
+                                                    "type": "string",
+                                                    "example": "There will be a meeting in the main hall at 10am."
+                                                },
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "draft"
+                                                },
+                                                "priority_level": {
+                                                    "type": "string",
+                                                    "example": "high"
+                                                },
+                                                "created_by": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "modified_by": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "created_at": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2025-08-03T15:32:08Z"
+                                                },
+                                                "updated_at": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2025-08-03T15:32:08Z"
+                                                },
+                                                "attachments": {
+                                                    "description": "List of uploaded attachments",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 4
+                                                            },
+                                                            "file_name": {
+                                                                "type": "string",
+                                                                "example": "5f8d9abc_file.pdf"
+                                                            },
+                                                            "file_type": {
+                                                                "type": "string",
+                                                                "example": "pdf"
+                                                            },
+                                                            "file_path": {
+                                                                "type": "string",
+                                                                "example": "https://example.com/notices/5f8d9abc_file.pdf"
+                                                            },
+                                                            "uploaded_at": {
+                                                                "type": "string",
+                                                                "format": "date-time",
+                                                                "example": "2025-08-03T15:32:08Z"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "propagations": {
+                                                    "description": "All target recipients (internal/external)",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 10
+                                                            },
+                                                            "notice_id": {
+                                                                "type": "integer",
+                                                                "example": 1
+                                                            },
+                                                            "user_id": {
+                                                                "description": "Internal user ID, or null for external",
+                                                                "type": "integer",
+                                                                "example": 5,
+                                                                "nullable": true
+                                                            },
+                                                            "name": {
+                                                                "description": "External user name, null for internal",
+                                                                "type": "string",
+                                                                "example": "John Doe",
+                                                                "nullable": true
+                                                            },
+                                                            "user_email": {
+                                                                "type": "string",
+                                                                "example": "john@example.com"
+                                                            },
+                                                            "is_read": {
+                                                                "type": "boolean",
+                                                                "example": false
+                                                            },
+                                                            "sent_at": {
+                                                                "type": "string",
+                                                                "format": "date-time",
+                                                                "example": "2025-08-03T15:32:08Z",
+                                                                "nullable": true
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Validation failed."
+                                        },
+                                        "errors": {
+                                            "properties": {
+                                                "title": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "example": "The title field is required."
+                                                    }
+                                                },
+                                                "attachments.0": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "example": "The attachments.0 must be a file of type: pdf, doc, docx, xlsx, xls, jpg, jpeg, png."
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to create notice",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Failed to create notice."
+                                        },
+                                        "error": {
+                                            "type": "string",
+                                            "example": "SQLSTATE[23000]...",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/notices/{id}": {
+            "get": {
+                "tags": [
+                    "Notice"
+                ],
+                "summary": "Show a specific notice",
+                "description": "Returns details of a specific notice by ID",
+                "operationId": "41ceb437961fe55fb6b5f765195d6217",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID of the notice",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Notice details",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Notice"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Notice not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Notice not found."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Notice"
+                ],
+                "summary": "Update an existing notice",
+                "description": "Update a notice by ID. Partial update allowed; fields you omit will remain unchanged. You can upload new attachments (same format as store).",
+                "operationId": "updateNotice",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID of the notice to update",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 3
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "description": "Notice update payload. Only send fields you want to update. Use multipart/form-data for file upload.",
+                    "required": false,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "properties": {
+                                    "title": {
+                                        "description": "Updated notice title (optional, max 255 chars).",
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "Updated Meeting Title"
+                                    },
+                                    "description": {
+                                        "description": "Updated body/content of the notice (optional).",
+                                        "type": "string",
+                                        "example": "The meeting time has changed to 11am."
+                                    },
+                                    "attachments[]": {
+                                        "description": "Optional new attachments (same formats as create). Existing attachments remain unless removed elsewhere.",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "format": "binary"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Notice updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Notice"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Notice not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Notice not found."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "The given data was invalid."
+                                        },
+                                        "errors": {
+                                            "properties": {
+                                                "attachments.0": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "example": "The attachments.0 must be a file of type: pdf, doc, docx, xlsx, xls, jpg, jpeg, png."
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Notice"
+                ],
+                "summary": "Delete a notice",
+                "description": "Deletes a notice by ID",
+                "operationId": "e31294f9417b3f3d007a67d81d06c4b7",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID of the notice",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Notice deleted successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Notice not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Notice not found."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/notices/draft": {
+            "post": {
+                "tags": [
+                    "Notice"
+                ],
+                "summary": "Create a new draft notice (with internal/external users and attachments)",
+                "description": "Creates a new notice in draft mode. You may assign to multiple internal users (by user IDs) or external users (by name and email), and upload multiple attachments. The notice is not published until you call the publish endpoint.",
+                "operationId": "draftNotice",
+                "requestBody": {
+                    "description": "Draft notice creation payload. For file upload, use multipart/form-data.",
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "title",
+                                    "description"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "description": "Notice headline/title (required, max 255 chars).",
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "Board Meeting (Draft)"
+                                    },
+                                    "description": {
+                                        "description": "Main content/body of the notice (required).",
+                                        "type": "string",
+                                        "example": "There will be a board meeting. Details will be finalized before publishing."
+                                    },
+                                    "internal_users": {
+                                        "description": "Optional array of internal user IDs (must exist in users table).",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "integer",
+                                            "example": 7
+                                        }
+                                    },
+                                    "external_users": {
+                                        "description": "Optional array of objects for external users (name & email required).",
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "name",
+                                                "email"
+                                            ],
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string",
+                                                    "example": "Jane External"
+                                                },
+                                                "email": {
+                                                    "type": "string",
+                                                    "format": "email",
+                                                    "example": "jane.external@example.com"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "status": {
+                                        "description": "Always set as 'draft' for this endpoint.",
+                                        "type": "string",
+                                        "enum": [
+                                            "draft"
+                                        ],
+                                        "example": "draft"
+                                    },
+                                    "priority_level": {
+                                        "description": "Priority level (optional, e.g., high, normal, low)",
+                                        "type": "string",
+                                        "example": "normal"
+                                    },
+                                    "attachments": {
+                                        "description": "Optional multiple files: PDF, DOC, DOCX, XLSX, XLS, JPG, JPEG, PNG (10MB max each).",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "format": "binary"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Draft notice created successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Notice created successfully."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 11
+                                                },
+                                                "title": {
+                                                    "type": "string",
+                                                    "example": "Board Meeting (Draft)"
+                                                },
+                                                "description": {
+                                                    "type": "string",
+                                                    "example": "There will be a board meeting. Details will be finalized before publishing."
+                                                },
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "draft"
+                                                },
+                                                "priority_level": {
+                                                    "type": "string",
+                                                    "example": "normal"
+                                                },
+                                                "created_by": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "modified_by": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "created_at": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2025-08-03T15:32:08Z"
+                                                },
+                                                "updated_at": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2025-08-03T15:32:08Z"
+                                                },
+                                                "attachments": {
+                                                    "description": "List of uploaded attachments",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 4
+                                                            },
+                                                            "file_name": {
+                                                                "type": "string",
+                                                                "example": "5f8d9abc_file.pdf"
+                                                            },
+                                                            "file_type": {
+                                                                "type": "string",
+                                                                "example": "pdf"
+                                                            },
+                                                            "file_path": {
+                                                                "type": "string",
+                                                                "example": "https://example.com/notices/5f8d9abc_file.pdf"
+                                                            },
+                                                            "uploaded_at": {
+                                                                "type": "string",
+                                                                "format": "date-time",
+                                                                "example": "2025-08-03T15:32:08Z"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "propagations": {
+                                                    "description": "All target recipients (internal/external) - all with sent_at as null.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 20
+                                                            },
+                                                            "notice_id": {
+                                                                "type": "integer",
+                                                                "example": 11
+                                                            },
+                                                            "user_id": {
+                                                                "type": "integer",
+                                                                "example": 7,
+                                                                "nullable": true
+                                                            },
+                                                            "name": {
+                                                                "type": "string",
+                                                                "example": "Jane External",
+                                                                "nullable": true
+                                                            },
+                                                            "user_email": {
+                                                                "type": "string",
+                                                                "example": "jane.external@example.com"
+                                                            },
+                                                            "is_read": {
+                                                                "type": "boolean",
+                                                                "example": false
+                                                            },
+                                                            "sent_at": {
+                                                                "type": "string",
+                                                                "format": "date-time",
+                                                                "example": null,
+                                                                "nullable": true
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Validation failed."
+                                        },
+                                        "errors": {
+                                            "properties": {
+                                                "title": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "example": "The title field is required."
+                                                    }
+                                                },
+                                                "attachments.0": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "example": "The attachments.0 must be a file of type: pdf, doc, docx, xlsx, xls, jpg, jpeg, png."
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unauthenticated."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to create notice",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Failed to create notice."
+                                        },
+                                        "error": {
+                                            "type": "string",
+                                            "example": "SQLSTATE[23000]...",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/notices/{id}/publish": {
+            "post": {
+                "tags": [
+                    "Notice"
+                ],
+                "summary": "Publish a draft notice (set status and send to all recipients)",
+                "description": "Publishes a draft notice. Updates the notice status to 'published' and sets 'sent_at' for all recipients who have not yet received the notice.",
+                "operationId": "publishNotice",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "The ID of the draft notice to publish.",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 11
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Notice published successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Notice published successfully."
+                                        },
+                                        "total_sent": {
+                                            "type": "integer",
+                                            "example": 12
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Notice is already published",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Notice is already published."
+                                        },
+                                        "notice_id": {
+                                            "type": "integer",
+                                            "example": 11
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "published"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "No unsent propagations found or Notice not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "No unsent propagations found for this notice."
+                                        },
+                                        "notice_id": {
+                                            "type": "integer",
+                                            "example": 11
+                                        },
+                                        "error": {
+                                            "type": "string",
+                                            "example": "Notice not found.",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to publish notice",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Failed to publish notice."
+                                        },
+                                        "error": {
+                                            "type": "string",
+                                            "example": "SQLSTATE[23000]...",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/notices/drafts": {
+            "get": {
+                "tags": [
+                    "Notice"
+                ],
+                "summary": "List all draft notices (paginated)",
+                "description": "Returns a paginated list of all draft notices, including creator, modifier, attachments, and propagations. Supports a per_page query parameter for pagination.",
+                "operationId": "draftNoticesList",
+                "parameters": [
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Number of draft notices per page (default: 10).",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 10
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated draft notice list",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 23
+                                                },
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "integer",
+                                                                "example": 11
+                                                            },
+                                                            "title": {
+                                                                "type": "string",
+                                                                "example": "Board Meeting (Draft)"
+                                                            },
+                                                            "description": {
+                                                                "type": "string",
+                                                                "example": "Draft description."
+                                                            },
+                                                            "status": {
+                                                                "type": "string",
+                                                                "example": "draft"
+                                                            },
+                                                            "priority_level": {
+                                                                "type": "string",
+                                                                "example": "normal"
+                                                            },
+                                                            "created_by": {
+                                                                "type": "integer",
+                                                                "example": 2
+                                                            },
+                                                            "modified_by": {
+                                                                "type": "integer",
+                                                                "example": 2
+                                                            },
+                                                            "created_at": {
+                                                                "type": "string",
+                                                                "format": "date-time",
+                                                                "example": "2025-08-03T15:32:08Z"
+                                                            },
+                                                            "updated_at": {
+                                                                "type": "string",
+                                                                "format": "date-time",
+                                                                "example": "2025-08-03T15:32:08Z"
+                                                            },
+                                                            "creator": {
+                                                                "properties": {
+                                                                    "id": {
+                                                                        "type": "integer",
+                                                                        "example": 2
+                                                                    },
+                                                                    "name": {
+                                                                        "type": "string",
+                                                                        "example": "Admin User"
+                                                                    },
+                                                                    "email": {
+                                                                        "type": "string",
+                                                                        "example": "admin@example.com"
+                                                                    }
+                                                                },
+                                                                "type": "object"
+                                                            },
+                                                            "modifier": {
+                                                                "properties": {
+                                                                    "id": {
+                                                                        "type": "integer",
+                                                                        "example": 2
+                                                                    },
+                                                                    "name": {
+                                                                        "type": "string",
+                                                                        "example": "Admin User"
+                                                                    },
+                                                                    "email": {
+                                                                        "type": "string",
+                                                                        "example": "admin@example.com"
+                                                                    }
+                                                                },
+                                                                "type": "object"
+                                                            },
+                                                            "attachments": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "integer",
+                                                                            "example": 4
+                                                                        },
+                                                                        "file_name": {
+                                                                            "type": "string",
+                                                                            "example": "draft_file.pdf"
+                                                                        },
+                                                                        "file_type": {
+                                                                            "type": "string",
+                                                                            "example": "pdf"
+                                                                        },
+                                                                        "file_path": {
+                                                                            "type": "string",
+                                                                            "example": "https://example.com/notices/draft_file.pdf"
+                                                                        },
+                                                                        "uploaded_at": {
+                                                                            "type": "string",
+                                                                            "format": "date-time",
+                                                                            "example": "2025-08-03T15:32:08Z"
+                                                                        }
+                                                                    },
+                                                                    "type": "object"
+                                                                }
+                                                            },
+                                                            "propagations": {
+                                                                "type": "array",
+                                                                "items": {
+                                                                    "properties": {
+                                                                        "id": {
+                                                                            "type": "integer",
+                                                                            "example": 20
+                                                                        },
+                                                                        "notice_id": {
+                                                                            "type": "integer",
+                                                                            "example": 11
+                                                                        },
+                                                                        "user_id": {
+                                                                            "type": "integer",
+                                                                            "example": 7,
+                                                                            "nullable": true
+                                                                        },
+                                                                        "name": {
+                                                                            "type": "string",
+                                                                            "example": "Jane External",
+                                                                            "nullable": true
+                                                                        },
+                                                                        "user_email": {
+                                                                            "type": "string",
+                                                                            "example": "jane.external@example.com"
+                                                                        },
+                                                                        "is_read": {
+                                                                            "type": "boolean",
+                                                                            "example": false
+                                                                        },
+                                                                        "sent_at": {
+                                                                            "type": "string",
+                                                                            "format": "date-time",
+                                                                            "example": null,
+                                                                            "nullable": true
+                                                                        }
+                                                                    },
+                                                                    "type": "object"
+                                                                }
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "message": {
+                                                    "type": "string",
+                                                    "example": "No draft notices found.",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Could not retrieve draft notices."
+                                        },
+                                        "error": {
+                                            "type": "string",
+                                            "example": "SQLSTATE[23000]...",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Notice": {
+                "title": "Notice",
+                "required": [
+                    "id",
+                    "title",
+                    "description"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "Office Closed on Friday"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "The office will remain closed this Friday due to maintenance work."
+                    },
+                    "priority_level": {
+                        "type": "string",
+                        "example": "high"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "published"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2024-07-29T12:00:00Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2024-07-29T12:00:00Z"
+                    }
+                },
+                "type": "object"
+            },
+            "User": {
+                "title": "User",
+                "required": [
+                    "id",
+                    "name",
+                    "email"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Nadia"
+                    },
+                    "email": {
+                        "type": "string",
+                        "example": "user@example.com"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "type": "object"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Auth",
+            "description": "Auth"
+        },
+        {
+            "name": "Notice",
+            "description": "Notice"
+        }
+    ]
+}
