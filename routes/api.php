@@ -15,6 +15,8 @@ use App\Http\Controllers\NoticePropagationController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Api\MeetingController;
 use App\Http\Controllers\Api\MeetingDetailController;
+use App\Http\Controllers\Api\MeetingAvailabilityController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -47,6 +49,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // mark notice as read
         Route::post('notices/{id}/read', [NoticeController::class, 'noticeMarkAsRead'])->name('notices.read');
+
+        // meeting details for user
+        Route::get('meeting-details/by-user', [MeetingDetailController::class, 'byUser'])->name('meeting-details.by-user');
+
+        // mark meeting detail propagation as read
+        Route::post('meeting-details/{id}/read', [MeetingDetailController::class, 'markAsRead'])->name('meeting-details.read');
     });
 
     // for profile update
@@ -71,10 +79,12 @@ Route::middleware('auth:sanctum')->group(function () {
         // for meeting
         Route::apiResource('meetings', MeetingController::class);
         // Extra endpoints if you want quick toggles:
-        Route::patch('meetings/{meeting}/toggle', [MeetingController::class, 'toggle']);
+        Route::patch('meetings/{meeting}/toggle', [MeetingController::class, 'toggle'])->name('meetings.toggle');
 
         // for meeting details propagations
         Route::apiResource('meetings-details', MeetingDetailController::class);
+
+        Route::get('v1/meetings/free', [MeetingAvailabilityController::class, 'free'])->name('meetings.free');
     });
 });
 

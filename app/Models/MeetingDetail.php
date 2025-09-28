@@ -8,6 +8,11 @@ class MeetingDetail extends Model
 {
     protected $fillable = ['title', 'start_date', 'end_date', 'meeting_id'];
 
+    protected $casts = [
+        'start_date' => 'datetime',
+        'end_date'   => 'datetime',
+    ];
+
     public function meeting()
     {
         return $this->belongsTo(Meeting::class, 'meeting_id');

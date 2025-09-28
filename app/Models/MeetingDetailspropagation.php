@@ -12,4 +12,9 @@ class MeetingDetailspropagation extends Model
     {
         return $this->belongsTo(MeetingDetail::class, 'meeting_detail_id');
     }
+
+    public function user()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'user_id');
+    }
 }

@@ -16,6 +16,12 @@ class PropagationResource extends JsonResource
             'user_id'           => $this->user_id,
             'sent_at'           => optional($this->sent_at)->toISOString(),
             'meeting_detail_id' => $this->meeting_detail_id,
+
+            // If user_id is set, include the user object (eager-loaded if available)
+            'user' => $this->when(
+                !is_null($this->user_id),
+                fn () => new UserMiniResource($this->whenLoaded('user', $this->user))
+            ),
         ];
     }
 }
