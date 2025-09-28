@@ -13,6 +13,8 @@ use App\Http\Controllers\NoticeController;
 use App\Http\Controllers\PasswordResetApiController;
 use App\Http\Controllers\NoticePropagationController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Api\MeetingController;
+use App\Http\Controllers\Api\MeetingDetailController;
 
 /*
 |--------------------------------------------------------------------------
@@ -65,6 +67,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // notice search
         Route::get('notices-search', [NoticeController::class, 'noticeSearch'])->name('notices.search');
+
+        // for meeting
+        Route::apiResource('meetings', MeetingController::class);
+        // Extra endpoints if you want quick toggles:
+        Route::patch('meetings/{meeting}/toggle', [MeetingController::class, 'toggle']);
+
+        // for meeting details propagations
+        Route::apiResource('meetings-details', MeetingDetailController::class);
     });
 });
 
