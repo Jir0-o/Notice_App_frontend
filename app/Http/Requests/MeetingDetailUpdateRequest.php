@@ -12,8 +12,9 @@ class MeetingDetailUpdateRequest extends FormRequest
     {
         return [
             'title'      => ['sometimes','string','max:255'],
-            'start_date' => ['sometimes','date'],
-            'end_date'   => ['sometimes','date','after_or_equal:start_date'],
+            'date'       => ['sometimes','date'],
+            'start_time' => ['sometimes','date_format:H:i'],
+            'end_time'   => ['sometimes','date_format:H:i'],
             'meeting_id' => ['sometimes','integer','exists:meetings,id'],
 
             // Propagations patch/sync

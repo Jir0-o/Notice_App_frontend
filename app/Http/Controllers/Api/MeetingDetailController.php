@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Http\Requests\MeetingDetailsByUserRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class MeetingDetailController extends Controller
 {
@@ -31,32 +32,65 @@ class MeetingDetailController extends Controller
 	{
 		$q = $meeting->meetingDetails()->getQuery(); // scoped to meeting
 
-		// Filters
+		// --- Filters ---
 		if ($s = $request->query('search')) {
 			$q->where('title', 'like', "%{$s}%");
 		}
-		if ($from = $request->query('date_from')) {
-			$q->whereDate('start_date', '>=', $from);
-		}
-		if ($to = $request->query('date_to')) {
-			$q->whereDate('end_date', '<=', $to);
-		}
-		if ($request->boolean('upcoming')) {
-			$q->where('start_date', '>=', now());
-		} elseif ($request->boolean('past')) {
-			$q->where('start_date', '<', now());
+
+		// Date range filters on the new 'date' column
+		$from = $request->query('date_from');
+		$to   = $request->query('date_to');
+
+		if ($from && $to) {
+			$q->whereDate('date', '>=', $from)
+			->whereDate('date', '<=', $to);
+		} elseif ($from) {
+			$q->whereDate('date', '>=', $from);
+		} elseif ($to) {
+			$q->whereDate('date', '<=', $to);
 		}
 
-		// Sorting
-		$sort = $request->query('sort', 'start_date');
+		// Upcoming / Past using (date, start_time) vs now
+		$now    = Carbon::now();
+		$today  = $now->toDateString();
+		$nowH_i = $now->format('H:i');
+
+		if ($request->boolean('upcoming')) {
+			$q->where(function ($w) use ($today, $nowH_i) {
+				$w->whereDate('date', '>', $today)
+				->orWhere(function ($x) use ($today, $nowH_i) {
+					$x->whereDate('date', $today)
+						->where('start_time', '>=', $nowH_i);
+				});
+			});
+		} elseif ($request->boolean('past')) {
+			$q->where(function ($w) use ($today, $nowH_i) {
+				$w->whereDate('date', '<', $today)
+				->orWhere(function ($x) use ($today, $nowH_i) {
+					$x->whereDate('date', $today)
+						->where('start_time', '<', $nowH_i);
+				});
+			});
+		}
+
+		// --- Sorting (updated columns) ---
+		$sort = (string) $request->query('sort', 'date');
 		$dir  = str_starts_with($sort, '-') ? 'desc' : 'asc';
 		$col  = ltrim($sort, '-');
-		if (!in_array($col, ['start_date','end_date','title','created_at'])) {
-			$col = 'start_date';
+		if (!in_array($col, ['date','start_time','title','created_at'], true)) {
+			$col = 'date';
 		}
 		$q->orderBy($col, $dir);
 
-		// Includes
+		// Provide a stable secondary sort
+		if ($col !== 'date') {
+			$q->orderBy('date', 'asc');
+		}
+		if ($col !== 'start_time') {
+			$q->orderBy('start_time', 'asc');
+		}
+
+		// --- Includes ---
 		$with = [];
 		$include = (string) $request->query('include');
 		if (str_contains($include, 'propagations')) {
@@ -64,16 +98,17 @@ class MeetingDetailController extends Controller
 		}
 		if ($with) $q->with($with);
 
+		// Counts
 		$q->withCount('propagations');
 
-		// Pagination
+		// --- Pagination ---
 		$perPage   = (int) $request->query('per_page', 15);
 		$page      = (int) $request->query('page', 1);
 		$paginator = $q->paginate($perPage, ['*'], 'page', $page)->appends($request->query());
 
-		// Custom response (no meta wrapper)
+		// --- Custom response (no 'meta' wrapper) ---
 		return response()->json([
-			'data'  => MeetingDetailResource::collection($paginator->items()),
+			'data'  => \App\Http\Resources\MeetingDetailResource::collection($paginator->items()),
 			'ok'    => true,
 			'links' => [
 				'first' => $paginator->url(1),
@@ -87,12 +122,13 @@ class MeetingDetailController extends Controller
 			'per_page'     => $paginator->perPage(),
 			'total'        => $paginator->total(),
 			'last_page'    => $paginator->lastPage(),
-			// Custom meta data for filters/sort/include
+
+			// Echo filters/sort/include at top level
 			'meeting_id'   => $meeting->id,
 			'filters'      => [
 				'search'    => $request->query('search'),
-				'date_from' => $request->query('date_from'),
-				'date_to'   => $request->query('date_to'),
+				'date_from' => $from,
+				'date_to'   => $to,
 				'upcoming'  => $request->query('upcoming'),
 				'past'      => $request->query('past'),
 			],
@@ -108,129 +144,194 @@ class MeetingDetailController extends Controller
 
 	public function store(MeetingDetailStoreRequest $request)
 	{
-		$payload   = $request->validated();
-
-		// Meeting context comes from request (NOT from route param)
-		$meetingId = (int) $payload['meeting_id'];
-		$meeting   = Meeting::select('id','title')->findOrFail($meetingId);
-
-		// Window to book
-		$start = Carbon::parse($payload['start_date']);
-		$end   = Carbon::parse($payload['end_date']);
-
-		// -------- CONFLICT CHECK (same meeting_id only) --------
-		$conflictItems = [];
-		foreach (($payload['propagations'] ?? []) as $idx => $p) {
-			$q = MeetingDetailspropagation::query()
-				->whereHas('meetingDetail', function ($md) use ($start, $end, $meetingId) {
-					$md->where('meeting_id', $meetingId)
-					->where('start_date', '<', $end)    // strict <
-					->where('end_date',   '>', $start); // strict >
-				})
-				->where(function ($w) use ($p) {
-					if (!empty($p['user_id'])) {
-						$w->orWhere('user_id', (int) $p['user_id']);
-					}
-					if (!empty($p['user_name']) && !empty($p['user_email'])) {
-						$w->orWhere(function ($x) use ($p) {
-							$x->where('user_name', $p['user_name'])
-							->where('user_email', $p['user_email']);
-						});
-					}
-				});
-
-			$hits = $q->with([
-					'meetingDetail:id,meeting_id,start_date,end_date',
-					'meetingDetail.meeting:id,title',
-				])
-				->get(['id','user_id','user_name','user_email','meeting_detail_id']);
-
-			if ($hits->isNotEmpty()) {
-				$conflictItems[] = [
-					'payload_index' => $idx,
-					'user_id'       => $p['user_id']   ?? null,
-					'user_name'     => $p['user_name'] ?? null,
-					'user_email'    => $p['user_email']?? null,
-					'conflicts'     => $hits->map(function ($c) {
-						return [
-							'propagation_id'    => $c->id,
-							'meeting_detail_id' => $c->meeting_detail_id,
-							'meeting_title'     => optional($c->meetingDetail->meeting)->title,
-							'busy_start'        => optional($c->meetingDetail->start_date)->toISOString(),
-							'busy_end'          => optional($c->meetingDetail->end_date)->toISOString(),
-						];
-					})->values(),
-				];
-			}
-		}
-
-		// NOTE: use $conflictItems (not $conflicts)
-		if (!empty($conflictItems)) {
-			// Dedupe to user-centric list
-			$busyUsersMap = [];
-			foreach ($conflictItems as $c) {
-				$label = !empty($c['user_id'])
-					? "ID#{$c['user_id']}" . (!empty($c['user_name']) ? " ({$c['user_name']})" : '')
-					: (trim(($c['user_name'] ?? '').' <'.($c['user_email'] ?? '').'>') ?: 'Unknown user');
-
-				if (!isset($busyUsersMap[$label])) {
-					$busyUsersMap[$label] = [
-						'user_id'    => $c['user_id']   ?? null,
-						'user_name'  => $c['user_name'] ?? null,
-						'user_email' => $c['user_email']?? null,
-						'blocking_windows' => [],
-					];
-				}
-				foreach ($c['conflicts'] as $hit) {
-					$busyUsersMap[$label]['blocking_windows'][] = $hit;
-				}
-			}
-			$busyUsers = array_values($busyUsersMap);
-
-			return response()->json([
-				'ok'         => false,
-				'message'    => "Time conflict: Users are already busy in this meeting’s requested window. For this meeting, change the room or the time.",
-				'meeting'    => ['id' => $meeting->id, 'title' => $meeting->title],
-				'conflicts'  => $conflictItems,
-				'busy_users' => $busyUsers,
-				'hint'       => 'Back-to-back is allowed. Adjust start/end or pick a different slot.',
-			], 422);
-		}
-
-		// -------- CREATE (atomic) --------
-		$detail = DB::transaction(function () use ($payload, $meetingId) {
-			$detail = MeetingDetail::create([
-				'meeting_id' => $meetingId,
-				'title'      => $payload['title'],
-				'start_date' => $payload['start_date'],
-				'end_date'   => $payload['end_date'],
+		DB::beginTransaction();
+		try {
+			// ---- VALIDATION (adds extra rules for internal/external split) ----
+			$request->validate([
+				'title'         => 'required|string|max:255',
+				'date'          => 'required|date',
+				'start_time'    => 'required|date_format:H:i',
+				'end_time'      => 'required|date_format:H:i|after:start_time',
+				'meeting_id'    => 'required|integer|exists:meetings,id',
+				'internal_users'=> 'nullable|array',
+				'internal_users.*' => 'integer|exists:users,id',
+				'external_users'=> 'nullable|array',
+				'external_users.*.email' => 'required_with:external_users|email',
+				'external_users.*.name'  => 'required_with:external_users|string|max:255',
 			]);
 
-			foreach (($payload['propagations'] ?? []) as $p) {
+			$meetingId  = (int) $request->input('meeting_id');
+			$meeting    = Meeting::select('id','title')->findOrFail($meetingId);
+
+			$date       = \Carbon\Carbon::parse($request->input('date'))->toDateString();
+			$startTime  = $request->input('start_time'); // H:i
+			$endTime    = $request->input('end_time');   // H:i
+
+			// ---- Resolve intended attendees (internal + external) ----
+			$internalIds = collect($request->input('internal_users', []))
+				->filter()->map(fn($v) => (int)$v)->unique()->values();
+
+			$internalUsers = $internalIds->isNotEmpty()
+				? \App\Models\User::whereIn('id', $internalIds)->get(['id','email'])
+				: collect();
+
+			$externals = collect($request->input('external_users', []))
+				->filter(fn($x) => !empty($x['email']) && !empty($x['name']))
+				->map(fn($x) => ['name' => $x['name'], 'email' => $x['email']])
+				->values();
+
+			// ---- CONFLICT CHECK (same meeting_id + same date + time overlap) ----
+			// Build identities to test: by user_id, or by (name+email)
+			$identities = collect();
+
+			if ($internalUsers->isNotEmpty()) {
+				foreach ($internalUsers as $u) {
+					$identities->push([
+						'user_id'    => (int)$u->id,
+						'user_name'  => null,
+						'user_email' => $u->email,
+					]);
+				}
+			}
+
+			if ($externals->isNotEmpty()) {
+				foreach ($externals as $e) {
+					$identities->push([
+						'user_id'    => null,
+						'user_name'  => $e['name'],
+						'user_email' => $e['email'],
+					]);
+				}
+			}
+
+			$conflicts = [];
+			foreach ($identities->unique(function ($x) {
+				return $x['user_id'] ? 'id:'.$x['user_id']
+									: 'ne:'.mb_strtolower($x['user_name'] ?? '')
+										.'|'.mb_strtolower($x['user_email'] ?? '');
+			}) as $who) {
+
+				$hasId = !empty($who['user_id']);
+				$hasNE = !empty($who['user_name']) && !empty($who['user_email']);
+				if (!$hasId && !$hasNE) continue;
+
+				$q = \App\Models\MeetingDetailspropagation::query()
+					->whereHas('meetingDetail', function ($md) use ($meetingId, $date, $startTime, $endTime) {
+						$md->where('meeting_id', $meetingId)
+						->whereDate('date', $date)
+						->where('start_time', '<', $endTime)  // strict overlap
+						->where('end_time',   '>', $startTime);
+					})
+					->where(function ($w) use ($who, $hasId, $hasNE) {
+						if ($hasId) $w->orWhere('user_id', (int) $who['user_id']);
+						if ($hasNE) {
+							$w->orWhere(function ($x) use ($who) {
+								$x->where('user_name', $who['user_name'])
+								->where('user_email', $who['user_email']);
+							});
+						}
+					});
+
+				$hits = $q->with([
+						'meetingDetail:id,meeting_id,date,start_time,end_time',
+						'meetingDetail.meeting:id,title',
+					])
+					->get(['id','user_id','user_name','user_email','meeting_detail_id']);
+
+				if ($hits->isNotEmpty()) {
+					$conflicts[] = [
+						'user_id'    => $who['user_id'],
+						'user_name'  => $who['user_name'],
+						'user_email' => $who['user_email'],
+						'conflicts'  => $hits->map(function ($c) {
+							return [
+								'propagation_id'    => $c->id,
+								'meeting_detail_id' => $c->meeting_detail_id,
+								'meeting_title'     => optional($c->meetingDetail->meeting)->title,
+								'busy_date'         => optional($c->meetingDetail->date)?->toDateString(),
+								'busy_start'        => optional($c->meetingDetail->start_time)?->format('H:i'),
+								'busy_end'          => optional($c->meetingDetail->end_time)?->format('H:i'),
+							];
+						})->values(),
+					];
+				}
+			}
+
+			if (!empty($conflicts)) {
+				DB::rollBack();
+				return response()->json([
+					'success'   => false,
+					'message'   => "Time conflict: Users are already busy in this meeting’s requested window. Change the room or time.",
+					'meeting'   => ['id' => $meeting->id, 'title' => $meeting->title],
+					'conflicts' => $conflicts,
+					'hint'      => 'Overlap rule is strict. Back-to-back (end == start) is allowed.',
+				], 422);
+			}
+
+			// ---- CREATE (atomic) ----
+			$detail = \App\Models\MeetingDetail::create([
+				'meeting_id' => $meetingId,
+				'title'      => $request->input('title'),
+				'date'       => $date,
+				'start_time' => $startTime,
+				'end_time'   => $endTime,
+			]);
+
+			// Internal → user_id + user_email; External → name + email
+			foreach ($internalUsers as $u) {
 				$detail->propagations()->create([
-					'user_name'  => $p['user_name']  ?? null,
-					'user_email' => $p['user_email'] ?? null,
-					'is_read'    => (int) ($p['is_read'] ?? 0),
-					'user_id'    => $p['user_id']    ?? null,
-					'sent_at'    => $p['sent_at']    ?? null,
+					'user_id'    => $u->id,
+					'user_name'  => null,
+					'user_email' => $u->email,
+					'is_read'    => false,
+					'sent_at'    => now(),
+				]);
+			}
+			foreach ($externals as $e) {
+				$detail->propagations()->create([
+					'user_id'    => null,
+					'user_name'  => $e['name'],
+					'user_email' => $e['email'],
+					'is_read'    => false,
+					'sent_at'    => now(),
 				]);
 			}
 
-			return $detail;
-		});
+			DB::commit();
 
-		$detail->loadCount('propagations');
+			$detail->loadCount('propagations');
+			if (filter_var($request->query('include'), FILTER_VALIDATE_BOOLEAN) ||
+				str_contains((string)$request->query('include'), 'propagations')) {
+				$detail->load('propagations');
+			}
 
-		$include = (string) $request->query('include');
-		if (str_contains($include, 'propagations')) {
-			$detail->load('propagations');
+			return (new \App\Http\Resources\MeetingDetailResource($detail))->additional([
+				'success' => true,
+				'message' => 'Meeting detail created successfully.',
+			]);
+
+		} catch (\Illuminate\Validation\ValidationException $e) {
+			DB::rollBack();
+			return response()->json([
+				'success' => false,
+				'message' => 'Validation failed.',
+				'errors'  => $e->errors(),
+			], 422);
+		} catch (\Throwable $e) {
+			DB::rollBack();
+			Log::error('Error creating meeting detail', [
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'request' => $request->all()
+			]);
+			return response()->json([
+				'success' => false,
+				'message' => 'Failed to create meeting detail.',
+				'error'   => config('app.debug') ? $e->getMessage() : null
+			], 500);
 		}
-
-		return (new MeetingDetailResource($detail))->additional([
-			'ok'   => true,
-			'meta' => ['message' => 'Meeting detail created successfully.'],
-		]);
 	}
+
 
 	/**
 	 * Update a detail (and its propagations) with conflict checks inside SAME meeting_id.
@@ -238,186 +339,217 @@ class MeetingDetailController extends Controller
 	 */
 	public function update(MeetingDetailUpdateRequest $request, $id)
 	{
-		// explicitly fetch detail by id from URL or request
-		$detailId = $id ?? $request->input('id');
-		$detail   = MeetingDetail::findOrFail($detailId);
+		DB::beginTransaction();
+		try {
+			// VALIDATION (mirror store; all are sometimes/nullable)
+			$request->validate([
+				'title'         => 'sometimes|string|max:255',
+				'date'          => 'sometimes|date',
+				'start_time'    => 'sometimes|date_format:H:i',
+				'end_time'      => 'sometimes|date_format:H:i',
+				'meeting_id'    => 'sometimes|integer|exists:meetings,id',
+				'internal_users'=> 'nullable|array',
+				'internal_users.*' => 'integer|exists:users,id',
+				'external_users'=> 'nullable|array',
+				'external_users.*.email' => 'required_with:external_users|email',
+				'external_users.*.name'  => 'required_with:external_users|string|max:255',
+			]);
 
-		// Target meeting (allow reassign)
-		$targetMeetingId = (int) $request->input('meeting_id', $detail->meeting_id);
-		$targetMeeting   = Meeting::select('id','title')->findOrFail($targetMeetingId);
+			$detail = \App\Models\MeetingDetail::with('propagations')->findOrFail($id);
 
-		// Effective window after update (use proposed values if provided)
-		$effectiveStart = $request->filled('start_date') ? Carbon::parse($request->input('start_date')) : $detail->start_date;
-		$effectiveEnd   = $request->filled('end_date')   ? Carbon::parse($request->input('end_date'))   : $detail->end_date;
+			// Target meeting + effective window after update
+			$targetMeetingId = (int) $request->input('meeting_id', $detail->meeting_id);
+			$targetMeeting   = Meeting::select('id','title')->findOrFail($targetMeetingId);
 
-		// ---- Build intended propagations set (for conflict check) ----
-		$current   = $detail->propagations()->get(['id','user_id','user_name','user_email']);
-		$intended  = $current->keyBy('id'); // id => obj
-		$rows      = collect($request->input('propagations', []));
-		$syncMode  = $request->boolean('propagations_sync'); // replace set?
+			$date      = $request->filled('date')       ? \Carbon\Carbon::parse($request->input('date'))->toDateString() : $detail->date?->toDateString();
+			$startTime = $request->filled('start_time') ? $request->input('start_time') : $detail->start_time?->format('H:i');
+			$endTime   = $request->filled('end_time')   ? $request->input('end_time')   : $detail->end_time?->format('H:i');
 
-		if ($request->has('propagations') && $syncMode) {
-			$intended = collect(); // rebuild from payload only
-		}
+			// ---- Build intended attendees (internal/external) for CONFLICT check ----
+			// Existing internal/external set from DB, then reconcile with payloads IF present.
+			$existingInternalIds = $detail->propagations
+				->whereNotNull('user_id')->pluck('user_id')->map(fn($v)=>(int)$v)->values();
+			$existingExternals   = $detail->propagations
+				->whereNull('user_id')
+				->map(fn($p) => ['name' => $p->user_name, 'email' => $p->user_email])->values();
 
-		foreach ($rows as $row) {
-			$p = is_array($row) ? $row : [];
+			$internalIds = $request->has('internal_users')
+				? collect($request->input('internal_users', []))->filter()->map(fn($v)=>(int)$v)->unique()->values()
+				: $existingInternalIds;
 
-			if (!empty($p['id']) && array_key_exists('delete', $p) && (bool)$p['delete'] === true) {
-				$intended->forget($p['id']);
-				continue;
+			$externalList = $request->has('external_users')
+				? collect($request->input('external_users', []))
+					->filter(fn($x) => !empty($x['email']) && !empty($x['name']))
+					->map(fn($x) => ['name' => $x['name'], 'email' => $x['email']])
+					->values()
+				: $existingExternals;
+
+			$internalUsers = $internalIds->isNotEmpty()
+				? \App\Models\User::whereIn('id', $internalIds)->get(['id','email'])
+				: collect();
+
+			// ---- CONFLICT CHECK (same meeting_id + same date + time overlap; exclude THIS detail) ----
+			$identities = collect();
+
+			foreach ($internalUsers as $u) {
+				$identities->push(['user_id'=>(int)$u->id, 'user_name'=>null, 'user_email'=>$u->email]);
+			}
+			foreach ($externalList as $e) {
+				$identities->push(['user_id'=>null, 'user_name'=>$e['name'], 'user_email'=>$e['email']]);
 			}
 
-			$uid = $p['user_id']    ?? null;
-			$un  = $p['user_name']  ?? null;
-			$ue  = $p['user_email'] ?? null;
+			$conflicts = [];
+			foreach ($identities->unique(function ($x) {
+				return $x['user_id'] ? 'id:'.$x['user_id']
+									: 'ne:'.mb_strtolower($x['user_name'] ?? '')
+										.'|'.mb_strtolower($x['user_email'] ?? '');
+			}) as $who) {
+				$hasId = !empty($who['user_id']);
+				$hasNE = !empty($who['user_name']) && !empty($who['user_email']);
+				if (!$hasId && !$hasNE) continue;
 
-			if (!empty($p['id'])) {
-				if ($existing = MeetingDetailspropagation::find($p['id'])) {
-					$intended->put($existing->id, (object)[
-						'id'         => $existing->id,
-						'user_id'    => array_key_exists('user_id', $p)    ? $uid : $existing->user_id,
-						'user_name'  => array_key_exists('user_name', $p)  ? $un  : $existing->user_name,
-						'user_email' => array_key_exists('user_email', $p) ? $ue  : $existing->user_email,
-					]);
-					continue;
-				}
-			}
-
-			if (!empty($uid) || (!empty($un) && !empty($ue))) {
-				$tmpKey = 'new:' . spl_object_id((object)$p);
-				$intended->put($tmpKey, (object)[
-					'id'         => null,
-					'user_id'    => $uid,
-					'user_name'  => $un,
-					'user_email' => $ue,
-				]);
-			}
-		}
-
-		// ---- CONFLICT CHECK (same target meeting_id only; exclude this detail) ----
-		$uniqueIdentities = $intended
-			->map(fn($x) => ['user_id'=>$x->user_id, 'user_name'=>$x->user_name, 'user_email'=>$x->user_email])
-			->unique(function ($x) {
-				return !empty($x['user_id'])
-					? 'id:'.$x['user_id']
-					: 'ne:'.mb_strtolower(trim((string)$x['user_name'])).'|'.mb_strtolower(trim((string)$x['user_email']));
-			})
-			->values();
-
-		$conflicts = [];
-		foreach ($uniqueIdentities as $who) {
-			$hasId = !empty($who['user_id']);
-			$hasNE = !empty($who['user_name']) && !empty($who['user_email']);
-			if (!$hasId && !$hasNE) continue;
-
-			$q = MeetingDetailspropagation::query()
-				->whereHas('meetingDetail', function ($md) use ($effectiveStart, $effectiveEnd, $detail, $targetMeetingId) {
-					$md->where('meeting_id', $targetMeetingId)
-					->where('id', '!=', $detail->id)
-					->where('start_date', '<', $effectiveEnd)
-					->where('end_date',   '>', $effectiveStart);
-				})
-				->where(function ($w) use ($who, $hasId, $hasNE) {
-					if ($hasId) $w->orWhere('user_id', (int)$who['user_id']);
-					if ($hasNE) {
-						$w->orWhere(function ($x) use ($who) {
-							$x->where('user_name', $who['user_name'])
-							->where('user_email', $who['user_email']);
-						});
-					}
-				});
-
-			$hits = $q->with([
-					'meetingDetail:id,meeting_id,start_date,end_date',
-					'meetingDetail.meeting:id,title',
-				])
-				->get(['id','user_id','user_name','user_email','meeting_detail_id']);
-
-			if ($hits->isNotEmpty()) {
-				$conflicts[] = [
-					'user_id'    => $who['user_id']   ?? null,
-					'user_name'  => $who['user_name'] ?? null,
-					'user_email' => $who['user_email']?? null,
-					'conflicts'  => $hits->map(function ($c) {
-						return [
-							'propagation_id'    => $c->id,
-							'meeting_detail_id' => $c->meeting_detail_id,
-							'meeting_title'     => optional($c->meetingDetail->meeting)->title,
-							'busy_start'        => optional($c->meetingDetail->start_date)->toISOString(),
-							'busy_end'          => optional($c->meetingDetail->end_date)->toISOString(),
-						];
-					})->values(),
-				];
-			}
-		}
-
-		if (!empty($conflicts)) {
-			return response()->json([
-				'ok'         => false,
-				'message'    => 'Time conflict: Users are already busy in this meeting’s requested window. Change the room or time.',
-				'meeting'    => ['id' => $targetMeeting->id, 'title' => $targetMeeting->title],
-				'conflicts'  => $conflicts,
-				'hint'       => 'Back-to-back is allowed. Adjust start/end or pick another slot.',
-			], 422);
-		}
-
-		// ---- APPLY UPDATE ----
-		DB::transaction(function () use ($request, $detail, $rows, $syncMode, $targetMeetingId) {
-			$detail->update($request->only(['title','start_date','end_date']) + ['meeting_id' => $targetMeetingId]);
-
-			if ($request->has('propagations')) {
-				$idsToKeep = [];
-
-				foreach ($rows as $row) {
-					$p = is_array($row) ? $row : [];
-
-					if (!empty($p['id']) && array_key_exists('delete', $p) && (bool)$p['delete'] === true) {
-						MeetingDetailspropagation::whereKey($p['id'])->delete();
-						continue;
-					}
-
-					$payload = [];
-					foreach (['user_name','user_email','is_read','user_id','sent_at'] as $k) {
-						if (array_key_exists($k, $p)) $payload[$k] = $p[$k];
-					}
-
-					if (!empty($p['id'])) {
-						if ($existing = MeetingDetailspropagation::find($p['id'])) {
-							if ($existing->meeting_detail_id !== $detail->id) {
-								$existing->meeting_detail_id = $detail->id;
-							}
-							if (!empty($payload)) $existing->fill($payload);
-							$existing->save();
-							$idsToKeep[] = $existing->id;
-							continue;
+				$q = \App\Models\MeetingDetailspropagation::query()
+					->whereHas('meetingDetail', function ($md) use ($targetMeetingId, $detail, $date, $startTime, $endTime) {
+						$md->where('meeting_id', $targetMeetingId)
+						->where('id', '!=', $detail->id)
+						->whereDate('date', $date)
+						->where('start_time', '<', $endTime)
+						->where('end_time',   '>', $startTime);
+					})
+					->where(function ($w) use ($who, $hasId, $hasNE) {
+						if ($hasId) $w->orWhere('user_id', (int) $who['user_id']);
+						if ($hasNE) {
+							$w->orWhere(function ($x) use ($who) {
+								$x->where('user_name', $who['user_name'])
+								->where('user_email', $who['user_email']);
+							});
 						}
-					}
+					});
 
-					if (!empty($payload)) {
-						$created = $detail->propagations()->create($payload);
-						$idsToKeep[] = $created->id;
-					}
-				}
+				$hits = $q->with([
+						'meetingDetail:id,meeting_id,date,start_time,end_time',
+						'meetingDetail.meeting:id,title',
+					])
+					->get(['id','user_id','user_name','user_email','meeting_detail_id']);
 
-				if ($syncMode) {
-					$detail->propagations()->whereNotIn('id', $idsToKeep)->delete();
+				if ($hits->isNotEmpty()) {
+					$conflicts[] = [
+						'user_id'    => $who['user_id'],
+						'user_name'  => $who['user_name'],
+						'user_email' => $who['user_email'],
+						'conflicts'  => $hits->map(function ($c) {
+							return [
+								'propagation_id'    => $c->id,
+								'meeting_detail_id' => $c->meeting_detail_id,
+								'meeting_title'     => optional($c->meetingDetail->meeting)->title,
+								'busy_date'         => optional($c->meetingDetail->date)?->toDateString(),
+								'busy_start'        => optional($c->meetingDetail->start_time)?->format('H:i'),
+								'busy_end'          => optional($c->meetingDetail->end_time)?->format('H:i'),
+							];
+						})->values(),
+					];
 				}
 			}
-		});
 
-		$detail->loadCount('propagations');
+			if (!empty($conflicts)) {
+				DB::rollBack();
+				return response()->json([
+					'success'   => false,
+					'message'   => 'Time conflict: Users are already busy in this meeting’s requested window. Change the room or time.',
+					'meeting'   => ['id' => $targetMeeting->id, 'title' => $targetMeeting->title],
+					'conflicts' => $conflicts,
+					'hint'      => 'Overlap is strict; end==start is fine.',
+				], 422);
+			}
 
-		$include = (string) $request->query('include');
-		if (str_contains($include, 'propagations')) {
-			$detail->load('propagations');
+			// ---- APPLY UPDATE (atomic) ----
+			$detail->update([
+				'meeting_id' => $targetMeetingId,
+				'title'      => $request->input('title', $detail->title),
+				'date'       => $date,
+				'start_time' => $startTime,
+				'end_time'   => $endTime,
+			]);
+
+			// INTERNAL reconciliation: diff by user_id
+			if ($request->has('internal_users')) {
+				$existingInternalIds = $detail->propagations()->whereNotNull('user_id')->pluck('user_id')->map(fn($v)=>(int)$v)->toArray();
+				$requestedInternalIds = $internalIds->toArray();
+
+				$toAdd    = array_diff($requestedInternalIds, $existingInternalIds);
+				$toRemove = array_diff($existingInternalIds, $requestedInternalIds);
+
+				if (!empty($toRemove)) {
+					\App\Models\MeetingDetailspropagation::where('meeting_detail_id', $detail->id)
+						->whereIn('user_id', $toRemove)
+						->delete();
+				}
+				if (!empty($toAdd)) {
+					$users = \App\Models\User::whereIn('id', $toAdd)->get(['id','email']);
+					foreach ($users as $u) {
+						$detail->propagations()->create([
+							'user_id'    => $u->id,
+							'user_name'  => null,
+							'user_email' => $u->email,
+							'is_read'    => false,
+							'sent_at'    => now(),
+						]);
+					}
+				}
+			}
+
+			// EXTERNAL replacement (only if provided)
+			if ($request->has('external_users')) {
+				\App\Models\MeetingDetailspropagation::where('meeting_detail_id', $detail->id)
+					->whereNull('user_id')
+					->delete();
+
+				foreach ($externalList as $e) {
+					$detail->propagations()->create([
+						'user_id'    => null,
+						'user_name'  => $e['name'],
+						'user_email' => $e['email'],
+						'is_read'    => false,
+						'sent_at'    => now(),
+					]);
+				}
+			}
+
+			DB::commit();
+
+			$detail->loadCount('propagations');
+			if (filter_var($request->query('include'), FILTER_VALIDATE_BOOLEAN) ||
+				str_contains((string)$request->query('include'), 'propagations')) {
+				$detail->load('propagations');
+			}
+
+			return (new \App\Http\Resources\MeetingDetailResource($detail))->additional([
+				'success' => true,
+				'message' => 'Meeting detail updated successfully.',
+			]);
+
+		} catch (\Illuminate\Validation\ValidationException $e) {
+			DB::rollBack();
+			return response()->json([
+				'success' => false,
+				'message' => 'Validation failed.',
+				'errors'  => $e->errors(),
+			], 422);
+		} catch (\Throwable $e) {
+			DB::rollBack();
+			Log::error('Error updating meeting detail', [
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'request' => $request->all()
+			]);
+			return response()->json([
+				'success' => false,
+				'message' => 'Failed to update meeting detail.',
+				'error'   => config('app.debug') ? $e->getMessage() : null,
+			], 500);
 		}
-
-		return (new MeetingDetailResource($detail))->additional([
-			'ok'   => true,
-			'meta' => ['message' => 'Meeting detail updated successfully.'],
-		]);
 	}
+
 
     /**
      * GET /v1/details/{detail}
@@ -483,17 +615,20 @@ class MeetingDetailController extends Controller
 		$userMail = $request->input('user_email');
 		$isRead   = $request->input('is_read'); // 0|1|null
 
+		// Optional window: 'start' and 'end' may be date or datetime strings
 		$start = $request->filled('start') ? Carbon::parse($request->input('start')) : null;
 		$end   = $request->filled('end')   ? Carbon::parse($request->input('end'))   : null;
 
 		$include = strtolower((string)$request->input('include', ''));
 		$per     = (int) $request->input('per_page', 15);
 
-		// Sorting
-		$sortInput = (string) $request->input('sort', 'start_date');
+		// Sorting: support new columns
+		$sortInput = (string) $request->input('sort', 'date');
 		$dir  = str_starts_with($sortInput, '-') ? 'desc' : 'asc';
 		$col  = ltrim($sortInput, '-');
-		if (!in_array($col, ['start_date','created_at'])) $col = 'start_date';
+		if (!in_array($col, ['date','start_time','created_at'])) {
+			$col = 'date';
+		}
 
 		// User + is_read matcher for propagations
 		$matchUser = function ($q) use ($userId, $userName, $userMail, $isRead) {
@@ -507,31 +642,59 @@ class MeetingDetailController extends Controller
 		};
 
 		$q = MeetingDetail::query()
-			// filter parent meeting by is_active
+			// optional filter parent meeting by is_active
 			->when(!is_null($request->input('is_active')), fn($qq) =>
 				$qq->whereHas('meeting', fn($m) => $m->where('is_active', (int) $request->boolean('is_active')))
 			)
-			// optional time overlap
-			->when($start && $end, fn($qq) =>
-				$qq->where('start_date', '<', $end)->where('end_date', '>', $start)
-			)
-			// must have at least one matching propagation
+			// time/date filtering based on new columns
+			->when($start && $end, function ($qq) use ($start, $end) {
+				$startDate = $start->toDateString();
+				$endDate   = $end->toDateString();
+
+				// Same-day window → exact date + time overlap
+				if ($startDate === $endDate) {
+					$startTime = $start->format('H:i');
+					$endTime   = $end->format('H:i');
+
+					$qq->whereDate('date', $startDate)
+					->where('start_time', '<', $endTime)   // strict overlap
+					->where('end_time',   '>', $startTime);
+				} else {
+					// Multi-day range → date BETWEEN (inclusive)
+					$qq->whereDate('date', '>=', $startDate)
+					->whereDate('date', '<=', $endDate);
+				}
+			})
+			// must have at least one matching propagation for this user
 			->whereHas('propagations', $matchUser)
 			// helpful count (only matching rows)
 			->withCount(['propagations as user_propagations_count' => $matchUser])
 			// includes
-			->when(str_contains($include, 'meeting'), fn($qq) => $qq->with('meeting:id,title,capacity,is_active'))
-			->when(str_contains($include, 'propagations'), fn($qq) => $qq->with(['propagations' => $matchUser]))
+			->when(str_contains($include, 'meeting'), fn($qq) =>
+				$qq->with('meeting:id,title,capacity,is_active')
+			)
+			->when(str_contains($include, 'propagations'), fn($qq) =>
+				$qq->with(['propagations' => $matchUser])
+			)
+			// primary ordering
 			->orderBy($col, $dir);
+
+		// Secondary ordering for stable results (date then time) if primary isn't start_time
+		if ($col !== 'date') {
+			$q->orderBy('date', 'asc');
+		}
+		if ($col !== 'start_time') {
+			$q->orderBy('start_time', 'asc');
+		}
 
 		$paginator = $q->paginate($per)->appends($request->query());
 
 		return response()->json([
-			// IMPORTANT: pass only items() to the resource to avoid Laravel's default meta block
+			// Pass only items() to avoid Laravel’s default meta wrapper
 			'data'  => \App\Http\Resources\MeetingDetailResource::collection($paginator->items()),
 			'ok'    => true,
 
-			// pagination links at top level
+			// Flat pagination links
 			'links' => [
 				'first' => $paginator->url(1),
 				'last'  => $paginator->url($paginator->lastPage()),
@@ -539,7 +702,7 @@ class MeetingDetailController extends Controller
 				'next'  => $paginator->nextPageUrl(),
 			],
 
-			// flattened pagination numbers (not inside meta)
+			// Flat pagination numbers
 			'current_page' => $paginator->currentPage(),
 			'from'         => $paginator->firstItem(),
 			'to'           => $paginator->lastItem(),
@@ -547,13 +710,13 @@ class MeetingDetailController extends Controller
 			'total'        => $paginator->total(),
 			'last_page'    => $paginator->lastPage(),
 
-			// echo filters at top level too
+			// Echo filters (use raw input strings so client sees what they sent)
 			'filters' => [
 				'user_id'    => $userId,
 				'user_name'  => $userName,
 				'user_email' => $userMail,
-				'start'      => $start?->toISOString(),
-				'end'        => $end?->toISOString(),
+				'start'      => $request->input('start'),
+				'end'        => $request->input('end'),
 				'is_active'  => $request->input('is_active'),
 				'is_read'    => $isRead,
 			],

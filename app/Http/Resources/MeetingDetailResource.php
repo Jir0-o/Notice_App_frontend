@@ -20,8 +20,9 @@ class MeetingDetailResource extends JsonResource
         return [
             'id'                 => $this->id,
             'title'              => $this->title,
-            'start_date'         => $this->start_date,
-            'end_date'           => $this->end_date,
+            'date'               => $this->date?->toDateString(),
+            'start_time'         => $this->start_time?->format('H:i'),
+            'end_time'           => $this->end_time?->format('H:i'),
             'meeting_id'         => $this->meeting_id,
             'propagations_count' => $this->whenCounted('propagations'),
             'propagations'       => $this->when(

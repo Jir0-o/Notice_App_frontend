@@ -3,12 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\FreeMeetingsRequest;
+use App\Models\MeetingDetail;
 use App\Http\Resources\MeetingResource;
 use App\Models\Meeting;
-use App\Models\MeetingDetail;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class MeetingAvailabilityController extends Controller
 {
@@ -27,22 +26,55 @@ class MeetingAvailabilityController extends Controller
      * Overlap rule: existing.start < query_end && existing.end > query_start
      * Boundary-touch is allowed (no conflict if end == start).
      */
-    public function free(FreeMeetingsRequest $request)
+    public function free(Request $request)
     {
-        $start = Carbon::parse($request->input('start'));
-        $end   = Carbon::parse($request->input('end'));
-        $per   = (int) $request->input('per_page', 15);
-        $include = (string) $request->input('include', ''); // e.g., 'busy_details'
+        // ---- Validate inputs ----
+        $v = Validator::make($request->all(), [
+            'date'        => ['required','date'],          // YYYY-MM-DD
+            'start_time'  => ['required','date_format:H:i'],
+            'end_time'    => ['required','date_format:H:i','after:start_time'],
 
-        // Busy meetings: those that have ANY MeetingDetail overlapping the window
-        $busyMeetingIds = MeetingDetail::query()
-            ->where('start_date', '<', $end)   // strict <
-            ->where('end_date',   '>', $start) // strict >
+            // optional filters
+            'is_active'    => ['nullable','boolean'],
+            'capacity_min' => ['nullable','integer','min:0'],
+            'capacity_max' => ['nullable','integer','min:0'],
+
+            'per_page'     => ['nullable','integer','min:1','max:200'],
+            'include'      => ['nullable','string'],       // e.g., 'busy_details'
+        ]);
+
+        if ($v->fails()) {
+            return response()->json([
+                'ok'      => false,
+                'message' => 'Validation failed.',
+                'errors'  => $v->errors(),
+            ], 422);
+        }
+
+        $date       = $request->input('date');        // '2025-11-10'
+        $startH     = $request->input('start_time');  // '09:00'
+        $endH       = $request->input('end_time');    // '10:00'
+        $per        = (int) $request->input('per_page', 15);
+        $include    = (string) $request->input('include', '');
+        $allowBackToBack = $request->boolean('allow_back_to_back', true);
+
+        // Choose operators based on the policy
+        // half-open: start < end && end > start
+        // closed:    start <= end && end >= start
+        [$lt, $gt] = $allowBackToBack ? ['<', '>'] : ['<=', '>='];
+
+        // ---- Busy meetings: any detail on that date that overlaps the time window ----
+        // Overlap rule: existing.start_time < endH AND existing.end_time > startH
+        // --- Busy meetings for EXACT date + time window ---
+        $busyMeetingIds = \App\Models\MeetingDetail::query()
+            ->whereDate('date', $date)
+            ->where('start_time', $lt,  $endH)
+            ->where('end_time',   $gt,  $startH)
             ->pluck('meeting_id')
             ->unique()
             ->values();
 
-        // Base query for free meetings (no overlapping details in the window)
+        // ---- Free meetings base query (no overlapping details on that date/time) ----
         $freeQuery = Meeting::query()
             ->when(!is_null($request->input('is_active')), fn ($q) =>
                 $q->where('is_active', (int) $request->boolean('is_active'))
@@ -53,23 +85,26 @@ class MeetingAvailabilityController extends Controller
             ->when($request->filled('capacity_max'), fn ($q) =>
                 $q->where('capacity', '<=', (int) $request->input('capacity_max'))
             )
-            ->whereDoesntHave('meetingDetails', function ($md) use ($start, $end) {
-                $md->where('start_date', '<', $end)
-                   ->where('end_date',   '>', $start);
+            ->whereDoesntHave('meetingDetails', function ($md) use ($date, $startH, $endH, $lt, $gt) {
+                $md->whereDate('date', $date)
+                ->where('start_time', $lt, $endH)
+                ->where('end_time',   $gt, $startH);
             })
             ->orderBy('title', 'asc');
 
         $paginator = $freeQuery->paginate($per)->appends($request->query());
 
-        // Optionally also return which meetings were busy + their conflicting details
+        // ---- Optional: include busy meetings + their blocking details ----
         $busyPayload = null;
         if (str_contains($include, 'busy_details') && $busyMeetingIds->isNotEmpty()) {
-            $busyMeetings = Meeting::query()
-                ->whereIn('id', $busyMeetingIds)
-                ->with(['meetingDetails' => function ($md) use ($start, $end) {
-                    $md->where('start_date', '<', $end)
-                       ->where('end_date',   '>', $start)
-                       ->orderBy('start_date', 'asc');
+            $busyMeetings = \App\Models\Meeting::query()
+                    ->whereIn('id', $busyMeetingIds)
+                    ->with(['meetingDetails' => function ($md) use ($date, $startH, $endH, $lt, $gt) {
+                        $md->whereDate('date', $date)
+                        ->where('start_time', $lt, $endH)
+                        ->where('end_time',   $gt, $startH)
+                    ->orderBy('date', 'asc')
+                    ->orderBy('start_time', 'asc');
                 }])
                 ->get(['id','title','capacity','is_active']);
 
@@ -85,29 +120,46 @@ class MeetingAvailabilityController extends Controller
                         return [
                             'detail_id'  => $d->id,
                             'title'      => $d->title,
-                            'start_date' => $d->start_date?->toISOString(),
-                            'end_date'   => $d->end_date?->toISOString(),
+                            'date'       => $d->date?->toDateString(),
+                            'start_time' => $d->start_time?->format('H:i'),
+                            'end_time'   => $d->end_time?->format('H:i'),
                         ];
                     })->values(),
                 ];
             })->values();
         }
 
-        return MeetingResource::collection($paginator)->additional([
-            'ok'   => true,
-            'meta' => [
-                'query_window' => [
-                    'start' => $start->toISOString(),
-                    'end'   => $end->toISOString(),
-                ],
-                'filters' => [
-                    'is_active'    => $request->input('is_active'),
-                    'capacity_min' => $request->input('capacity_min'),
-                    'capacity_max' => $request->input('capacity_max'),
-                ],
-                'include'       => $include,
-                'busy_meetings' => $busyPayload, // null unless include=busy_details
+        // ---- Flat response (no "meta" wrapper) ----
+        return response()->json([
+            'data'  => MeetingResource::collection($paginator->items()),
+            'ok'    => true,
+
+            'query_window' => [
+                'date'       => $date,
+                'start_time' => $startH,
+                'end_time'   => $endH,
             ],
+            'filters' => [
+                'is_active'    => $request->input('is_active'),
+                'capacity_min' => $request->input('capacity_min'),
+                'capacity_max' => $request->input('capacity_max'),
+            ],
+            'include'       => $include,
+            'busy_meetings' => $busyPayload, // null unless include=busy_details
+
+            // Pagination (top-level)
+            'links' => [
+                'first' => $paginator->url(1),
+                'last'  => $paginator->url($paginator->lastPage()),
+                'prev'  => $paginator->previousPageUrl(),
+                'next'  => $paginator->nextPageUrl(),
+            ],
+            'current_page' => $paginator->currentPage(),
+            'from'         => $paginator->firstItem(),
+            'to'           => $paginator->lastItem(),
+            'per_page'     => $paginator->perPage(),
+            'total'        => $paginator->total(),
+            'last_page'    => $paginator->lastPage(),
         ]);
     }
 }

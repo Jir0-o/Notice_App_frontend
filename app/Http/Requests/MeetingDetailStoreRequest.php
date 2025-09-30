@@ -12,8 +12,9 @@ class MeetingDetailStoreRequest extends FormRequest
     {
         return [
             'title'      => ['required','string','max:255'],
-            'start_date' => ['required','date'],
-            'end_date'   => ['required','date','after_or_equal:start_date'],
+            'date'       => ['required','date'],
+            'start_time' => ['required','date_format:H:i'],
+            'end_time'   => ['required','date_format:H:i'],
             'meeting_id' => ['required','integer','exists:meetings,id'],
 
             // optional propagations for quick-create (array of objects)

@@ -6,11 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class MeetingDetail extends Model
 {
-    protected $fillable = ['title', 'start_date', 'end_date', 'meeting_id'];
+    protected $fillable = ['title', 'date', 'start_time', 'end_time', 'meeting_id'];
 
     protected $casts = [
-        'start_date' => 'datetime',
-        'end_date'   => 'datetime',
+        'date' => 'date',
+        'start_time' => 'datetime:H:i',
+        'end_time' => 'datetime:H:i',
     ];
 
     public function meeting()
