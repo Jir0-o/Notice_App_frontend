@@ -44,7 +44,7 @@ class MeetingController extends Controller
         }
         $q->orderBy($col, $dir);
 
-        // Includes (read only)
+        // Includes
         $include = (string) $request->query('include');
         $with = [];
         if (str_contains($include, 'details')) {
@@ -58,24 +58,40 @@ class MeetingController extends Controller
         // Counts
         $q->withCount('meetingDetails');
 
+        // Pagination
         $perPage   = (int) $request->query('per_page', 15);
         $page      = (int) $request->query('page', 1);
         $paginator = $q->paginate($perPage, ['*'], 'page', $page)->appends($request->query());
 
-        return MeetingResource::collection($paginator)->additional([
-            'ok'   => true,
-            'meta' => [
-                'filters' => [
-                    'search'       => $request->query('search'),
-                    'is_active'    => $request->query('is_active'),
-                    'capacity_min' => $request->query('capacity_min'),
-                    'capacity_max' => $request->query('capacity_max'),
-                ],
-                'sort'    => $sort,
-                'include' => $include,
+        // Build custom response (no meta wrapper)
+        return response()->json([
+            'data'  => MeetingResource::collection($paginator->items()),
+            'ok'    => true,
+            'links' => [
+                'first' => $paginator->url(1),
+                'last'  => $paginator->url($paginator->lastPage()),
+                'prev'  => $paginator->previousPageUrl(),
+                'next'  => $paginator->nextPageUrl(),
             ],
+            // Flatten pagination info here
+            'current_page' => $paginator->currentPage(),
+            'from'         => $paginator->firstItem(),
+            'to'           => $paginator->lastItem(),
+            'per_page'     => $paginator->perPage(),
+            'total'        => $paginator->total(),
+            'last_page'    => $paginator->lastPage(),
+            // Keep filters + sort at top level too
+            'filters' => [
+                'search'       => $request->query('search'),
+                'is_active'    => $request->query('is_active'),
+                'capacity_min' => $request->query('capacity_min'),
+                'capacity_max' => $request->query('capacity_max'),
+            ],
+            'sort'    => $sort,
+            'include' => $include,
         ]);
     }
+
 
     /**
      * POST /v1/meetings

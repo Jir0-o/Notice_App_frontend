@@ -12,7 +12,7 @@ class MeetingStoreRequest extends FormRequest
     {
         return [
             'title'     => ['required','string','max:255'],
-            'capacity'  => ['required','integer','min:1','max:100000'],
+            'capacity'  => ['nullable','integer','min:1','max:100000'],
             'is_active' => ['sometimes','boolean'],
         ];
     }

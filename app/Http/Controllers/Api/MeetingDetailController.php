@@ -28,64 +28,78 @@ class MeetingDetailController extends Controller
      * - per_page=15
      */
     public function index(Meeting $meeting, Request $request)
-    {
-        $q = $meeting->meetingDetails()->getQuery(); // scoped to meeting
+	{
+		$q = $meeting->meetingDetails()->getQuery(); // scoped to meeting
 
-        // Filters
-        if ($s = $request->query('search')) {
-            $q->where('title', 'like', "%{$s}%");
-        }
-        if ($from = $request->query('date_from')) {
-            $q->whereDate('start_date', '>=', $from);
-        }
-        if ($to = $request->query('date_to')) {
-            $q->whereDate('end_date', '<=', $to);
-        }
-        if ($request->boolean('upcoming')) {
-            $q->where('start_date', '>=', now());
-        } elseif ($request->boolean('past')) {
-            $q->where('start_date', '<', now());
-        }
+		// Filters
+		if ($s = $request->query('search')) {
+			$q->where('title', 'like', "%{$s}%");
+		}
+		if ($from = $request->query('date_from')) {
+			$q->whereDate('start_date', '>=', $from);
+		}
+		if ($to = $request->query('date_to')) {
+			$q->whereDate('end_date', '<=', $to);
+		}
+		if ($request->boolean('upcoming')) {
+			$q->where('start_date', '>=', now());
+		} elseif ($request->boolean('past')) {
+			$q->where('start_date', '<', now());
+		}
 
-        // Sorting
-        $sort = $request->query('sort', 'start_date');
-        $dir  = str_starts_with($sort, '-') ? 'desc' : 'asc';
-        $col  = ltrim($sort, '-');
-        if (!in_array($col, ['start_date','end_date','title','created_at'])) {
-            $col = 'start_date';
-        }
-        $q->orderBy($col, $dir);
+		// Sorting
+		$sort = $request->query('sort', 'start_date');
+		$dir  = str_starts_with($sort, '-') ? 'desc' : 'asc';
+		$col  = ltrim($sort, '-');
+		if (!in_array($col, ['start_date','end_date','title','created_at'])) {
+			$col = 'start_date';
+		}
+		$q->orderBy($col, $dir);
 
-        // Includes
-        $with = [];
-        $include = (string) $request->query('include');
-        if (str_contains($include, 'propagations')) {
-            $with[] = 'propagations';
-        }
-        if ($with) $q->with($with);
+		// Includes
+		$with = [];
+		$include = (string) $request->query('include');
+		if (str_contains($include, 'propagations')) {
+			$with[] = 'propagations';
+		}
+		if ($with) $q->with($with);
 
-        $q->withCount('propagations');
+		$q->withCount('propagations');
 
-        $perPage   = (int) $request->query('per_page', 15);
-        $page      = (int) $request->query('page', 1);
-        $paginator = $q->paginate($perPage, ['*'], 'page', $page)->appends($request->query());
+		// Pagination
+		$perPage   = (int) $request->query('per_page', 15);
+		$page      = (int) $request->query('page', 1);
+		$paginator = $q->paginate($perPage, ['*'], 'page', $page)->appends($request->query());
 
-        return MeetingDetailResource::collection($paginator)->additional([
-            'ok'   => true,
-            'meta' => [
-                'meeting_id' => $meeting->id,
-                'filters'    => [
-                    'search'    => $request->query('search'),
-                    'date_from' => $request->query('date_from'),
-                    'date_to'   => $request->query('date_to'),
-                    'upcoming'  => $request->query('upcoming'),
-                    'past'      => $request->query('past'),
-                ],
-                'sort'    => $sort,
-                'include' => $include,
-            ],
-        ]);
-    }
+		// Custom response (no meta wrapper)
+		return response()->json([
+			'data'  => MeetingDetailResource::collection($paginator->items()),
+			'ok'    => true,
+			'links' => [
+				'first' => $paginator->url(1),
+				'last'  => $paginator->url($paginator->lastPage()),
+				'prev'  => $paginator->previousPageUrl(),
+				'next'  => $paginator->nextPageUrl(),
+			],
+			'current_page' => $paginator->currentPage(),
+			'from'         => $paginator->firstItem(),
+			'to'           => $paginator->lastItem(),
+			'per_page'     => $paginator->perPage(),
+			'total'        => $paginator->total(),
+			'last_page'    => $paginator->lastPage(),
+			// Custom meta data for filters/sort/include
+			'meeting_id'   => $meeting->id,
+			'filters'      => [
+				'search'    => $request->query('search'),
+				'date_from' => $request->query('date_from'),
+				'date_to'   => $request->query('date_to'),
+				'upcoming'  => $request->query('upcoming'),
+				'past'      => $request->query('past'),
+			],
+			'sort'    => $sort,
+			'include' => $include,
+		]);
+	}
 
     /**
      * POST /v1/meetings/{meeting}/details
@@ -485,10 +499,10 @@ class MeetingDetailController extends Controller
 		$matchUser = function ($q) use ($userId, $userName, $userMail, $isRead) {
 			$q->when($userId, fn($qq) => $qq->where('user_id', $userId))
 			->when(!$userId && $userName && $userMail, fn($qq) =>
-					$qq->where('user_name', $userName)->where('user_email', $userMail)
+				$qq->where('user_name', $userName)->where('user_email', $userMail)
 			)
 			->when(!is_null($isRead), fn($qq) =>
-					$qq->where('is_read', (int) $isRead) // 0/1
+				$qq->where('is_read', (int) $isRead) // 0/1
 			);
 		};
 
@@ -512,23 +526,42 @@ class MeetingDetailController extends Controller
 
 		$paginator = $q->paginate($per)->appends($request->query());
 
-		return MeetingDetailResource::collection($paginator)->additional([
-			'ok'   => true,
-			'meta' => [
-				'filters' => [
-					'user_id'   => $userId,
-					'user_name' => $userName,
-					'user_email'=> $userMail,
-					'start'     => $start?->toISOString(),
-					'end'       => $end?->toISOString(),
-					'is_active' => $request->input('is_active'),
-					'is_read'   => $isRead, // echo back
-				],
-				'include' => $include,
-				'sort'    => $sortInput,
+		return response()->json([
+			// IMPORTANT: pass only items() to the resource to avoid Laravel's default meta block
+			'data'  => \App\Http\Resources\MeetingDetailResource::collection($paginator->items()),
+			'ok'    => true,
+
+			// pagination links at top level
+			'links' => [
+				'first' => $paginator->url(1),
+				'last'  => $paginator->url($paginator->lastPage()),
+				'prev'  => $paginator->previousPageUrl(),
+				'next'  => $paginator->nextPageUrl(),
 			],
+
+			// flattened pagination numbers (not inside meta)
+			'current_page' => $paginator->currentPage(),
+			'from'         => $paginator->firstItem(),
+			'to'           => $paginator->lastItem(),
+			'per_page'     => $paginator->perPage(),
+			'total'        => $paginator->total(),
+			'last_page'    => $paginator->lastPage(),
+
+			// echo filters at top level too
+			'filters' => [
+				'user_id'    => $userId,
+				'user_name'  => $userName,
+				'user_email' => $userMail,
+				'start'      => $start?->toISOString(),
+				'end'        => $end?->toISOString(),
+				'is_active'  => $request->input('is_active'),
+				'is_read'    => $isRead,
+			],
+			'include' => $include,
+			'sort'    => $sortInput,
 		]);
 	}
+
 
 	public function markAsRead(Request $request, $id)
 	{
