@@ -13,8 +13,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Http\Requests\MeetingDetailsByUserRequest;
+use App\Jobs\SendMeetingEmailsJob;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\MeetingSent;
 
 class MeetingDetailController extends Controller
 {
@@ -28,16 +31,22 @@ class MeetingDetailController extends Controller
      * - include=propagations
      * - per_page=15
      */
-    public function index(Meeting $meeting, Request $request)
+    // GET /api/meetings-details
+	public function index(Request $request)
 	{
-		$q = $meeting->meetingDetails()->getQuery(); // scoped to meeting
+		$q = MeetingDetail::query();
 
-		// --- Filters ---
+		// ---- Optional filters ----
 		if ($s = $request->query('search')) {
 			$q->where('title', 'like', "%{$s}%");
 		}
 
-		// Date range filters on the new 'date' column
+		// Optional meeting_id filter
+		if ($mid = $request->query('meeting_id')) {
+			$q->where('meeting_id', (int) $mid);
+		}
+
+		// Date range on new 'date' column
 		$from = $request->query('date_from');
 		$to   = $request->query('date_to');
 
@@ -50,10 +59,10 @@ class MeetingDetailController extends Controller
 			$q->whereDate('date', '<=', $to);
 		}
 
-		// Upcoming / Past using (date, start_time) vs now
-		$now    = Carbon::now();
-		$today  = $now->toDateString();
-		$nowH_i = $now->format('H:i');
+		// Upcoming / Past using (date, start_time)
+		$now     = Carbon::now();
+		$today   = $now->toDateString();
+		$nowH_i  = $now->format('H:i');
 
 		if ($request->boolean('upcoming')) {
 			$q->where(function ($w) use ($today, $nowH_i) {
@@ -73,7 +82,7 @@ class MeetingDetailController extends Controller
 			});
 		}
 
-		// --- Sorting (updated columns) ---
+		// ---- Sorting ----
 		$sort = (string) $request->query('sort', 'date');
 		$dir  = str_starts_with($sort, '-') ? 'desc' : 'asc';
 		$col  = ltrim($sort, '-');
@@ -82,7 +91,7 @@ class MeetingDetailController extends Controller
 		}
 		$q->orderBy($col, $dir);
 
-		// Provide a stable secondary sort
+		// Stable secondary sort for deterministic ordering
 		if ($col !== 'date') {
 			$q->orderBy('date', 'asc');
 		}
@@ -90,26 +99,29 @@ class MeetingDetailController extends Controller
 			$q->orderBy('start_time', 'asc');
 		}
 
-		// --- Includes ---
-		$with = [];
+		// ---- Includes ----
 		$include = (string) $request->query('include');
 		if (str_contains($include, 'propagations')) {
-			$with[] = 'propagations';
+			$q->with('propagations');
 		}
-		if ($with) $q->with($with);
+		if (str_contains($include, 'meeting')) {
+			$q->with('meeting:id,title,capacity,is_active');
+		}
 
 		// Counts
 		$q->withCount('propagations');
 
-		// --- Pagination ---
+		// ---- Pagination ----
 		$perPage   = (int) $request->query('per_page', 15);
 		$page      = (int) $request->query('page', 1);
-		$paginator = $q->paginate($perPage, ['*'], 'page', $page)->appends($request->query());
+		$paginator = $q->paginate($perPage, ['*'], 'page', $page)
+					->appends($request->query());
 
-		// --- Custom response (no 'meta' wrapper) ---
+		// ---- Flat response (no nested meta) ----
 		return response()->json([
 			'data'  => \App\Http\Resources\MeetingDetailResource::collection($paginator->items()),
 			'ok'    => true,
+
 			'links' => [
 				'first' => $paginator->url(1),
 				'last'  => $paginator->url($paginator->lastPage()),
@@ -124,9 +136,9 @@ class MeetingDetailController extends Controller
 			'last_page'    => $paginator->lastPage(),
 
 			// Echo filters/sort/include at top level
-			'meeting_id'   => $meeting->id,
-			'filters'      => [
+			'filters' => [
 				'search'    => $request->query('search'),
+				'meeting_id'=> $request->query('meeting_id'),
 				'date_from' => $from,
 				'date_to'   => $to,
 				'upcoming'  => $request->query('upcoming'),
@@ -161,7 +173,7 @@ class MeetingDetailController extends Controller
 			]);
 
 			$meetingId  = (int) $request->input('meeting_id');
-			$meeting    = Meeting::select('id','title')->findOrFail($meetingId);
+			$meeting    = Meeting::select('id','title', 'capacity')->findOrFail($meetingId);
 
 			$date       = \Carbon\Carbon::parse($request->input('date'))->toDateString();
 			$startTime  = $request->input('start_time'); // H:i
@@ -277,24 +289,45 @@ class MeetingDetailController extends Controller
 				'end_time'   => $endTime,
 			]);
 
-			// Internal → user_id + user_email; External → name + email
-			foreach ($internalUsers as $u) {
-				$detail->propagations()->create([
-					'user_id'    => $u->id,
-					'user_name'  => null,
-					'user_email' => $u->email,
-					'is_read'    => false,
-					'sent_at'    => now(),
-				]);
+			// Internal → user_id + user_email; External → name + email)
+			if ($internalUsers->isNotEmpty()) {
+				foreach ($internalUsers as $u) {
+					$detail->propagations()->create([
+						'user_id'    => $u->id,
+						'user_name'  => null,
+						'user_email' => $u->email,
+						'is_read'    => false,
+						'sent_at'    => now(),
+					]);
+				}
+
+				try {
+                    // Option A: queueable send (recommended in prod)
+                    Notification::send($internalUsers, new MeetingSent($detail));
+
+                    Log::info('Meeting notifications queued for internal users', [
+                        'meeting_id' => $meeting->id,
+                        'count'     => $internalUsers->count(),
+                        'users'     => $internalUsers->pluck('email'),
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::error('Error sending meeting notifications', [
+                        'meeting_id' => $detail->id,
+                        'error'     => $e->getMessage(),
+                    ]);
+                }
 			}
-			foreach ($externals as $e) {
-				$detail->propagations()->create([
-					'user_id'    => null,
-					'user_name'  => $e['name'],
-					'user_email' => $e['email'],
-					'is_read'    => false,
-					'sent_at'    => now(),
-				]);
+			// External → user_id = null
+			if ($externals->isNotEmpty()) {
+				foreach ($externals as $e) {
+					$detail->propagations()->create([
+						'user_id'    => null,
+						'user_name'  => $e['name'],
+						'user_email' => $e['email'],
+						'is_read'    => false,
+						'sent_at'    => now(),
+					]);
+				}
 			}
 
 			DB::commit();
@@ -304,6 +337,8 @@ class MeetingDetailController extends Controller
 				str_contains((string)$request->query('include'), 'propagations')) {
 				$detail->load('propagations');
 			}
+
+			dispatch(new SendMeetingEmailsJob($detail->id));
 
 			return (new \App\Http\Resources\MeetingDetailResource($detail))->additional([
 				'success' => true,
@@ -354,6 +389,8 @@ class MeetingDetailController extends Controller
 				'external_users.*.email' => 'required_with:external_users|email',
 				'external_users.*.name'  => 'required_with:external_users|string|max:255',
 			]);
+
+			$newPropagationIdsToEmail = [];
 
 			$detail = \App\Models\MeetingDetail::with('propagations')->findOrFail($id);
 
@@ -473,7 +510,12 @@ class MeetingDetailController extends Controller
 
 			// INTERNAL reconciliation: diff by user_id
 			if ($request->has('internal_users')) {
-				$existingInternalIds = $detail->propagations()->whereNotNull('user_id')->pluck('user_id')->map(fn($v)=>(int)$v)->toArray();
+				$existingInternalIds = $detail->propagations()
+					->whereNotNull('user_id')
+					->pluck('user_id')
+					->map(fn($v)=>(int)$v)
+					->toArray();
+
 				$requestedInternalIds = $internalIds->toArray();
 
 				$toAdd    = array_diff($requestedInternalIds, $existingInternalIds);
@@ -487,33 +529,40 @@ class MeetingDetailController extends Controller
 				if (!empty($toAdd)) {
 					$users = \App\Models\User::whereIn('id', $toAdd)->get(['id','email']);
 					foreach ($users as $u) {
-						$detail->propagations()->create([
+						$prop = $detail->propagations()->create([
 							'user_id'    => $u->id,
 							'user_name'  => null,
 							'user_email' => $u->email,
 							'is_read'    => false,
 							'sent_at'    => now(),
 						]);
+						$newPropagationIdsToEmail[] = $prop->id; // collect new IDs
 					}
 				}
 			}
 
-			// EXTERNAL replacement (only if provided)
+			// EXTERNAL replacement
 			if ($request->has('external_users')) {
 				\App\Models\MeetingDetailspropagation::where('meeting_detail_id', $detail->id)
 					->whereNull('user_id')
 					->delete();
 
 				foreach ($externalList as $e) {
-					$detail->propagations()->create([
+					$prop = $detail->propagations()->create([
 						'user_id'    => null,
 						'user_name'  => $e['name'],
 						'user_email' => $e['email'],
 						'is_read'    => false,
 						'sent_at'    => now(),
 					]);
+					$newPropagationIdsToEmail[] = $prop->id; // collect new IDs
 				}
 			}
+
+			// If notice already published and new recipients were added, enqueue emails just for them
+            if (!empty($newPropagationIdsToEmail)) {
+                dispatch(new SendMeetingEmailsJob($detail->id, $newPropagationIdsToEmail));
+            }
 
 			DB::commit();
 
@@ -526,6 +575,7 @@ class MeetingDetailController extends Controller
 			return (new \App\Http\Resources\MeetingDetailResource($detail))->additional([
 				'success' => true,
 				'message' => 'Meeting detail updated successfully.',
+				'new_propagation_emails_dispatched_for_ids' => $newPropagationIdsToEmail,
 			]);
 
 		} catch (\Illuminate\Validation\ValidationException $e) {

@@ -54,7 +54,7 @@ class MeetingAvailabilityController extends Controller
         $date       = $request->input('date');        // '2025-11-10'
         $startH     = $request->input('start_time');  // '09:00'
         $endH       = $request->input('end_time');    // '10:00'
-        $per        = (int) $request->input('per_page', 15);
+        $per        = (int) $request->input('per_page', 200);
         $include    = (string) $request->input('include', '');
         $allowBackToBack = $request->boolean('allow_back_to_back', true);
 
