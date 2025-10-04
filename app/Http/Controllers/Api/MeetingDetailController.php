@@ -658,20 +658,46 @@ class MeetingDetailController extends Controller
 		], 200);
 	}
 
-	public function byUser(MeetingDetailsByUserRequest $request)
+	public function byUser(Request $request)
 	{
-		$userId   = $request->input('user_id');
-		$userName = $request->input('user_name');
+		// --- minimal validation (since we're not using a FormRequest) ---
+		$request->validate([
+			'user_id'    => 'sometimes|integer|exists:users,id',
+			'user_name'  => 'sometimes|string',
+			'user_email' => 'sometimes|email',
+			'is_read'    => 'sometimes|in:0,1',
+			'start'      => 'sometimes|date',
+			'end'        => 'sometimes|date|after_or_equal:start',
+			'per_page'   => 'sometimes|integer|min:1|max:100',
+			'sort'       => 'sometimes|string',
+			'is_active'  => 'sometimes|boolean',
+			'include'    => 'sometimes|string',
+		]);
+
+		// Prefer the authenticated user; allow explicit override via query if you want
+		$authId  = Auth::user()?->id;
+		$userId  = $request->filled('user_id') ? (int) $request->input('user_id') : $authId;
+
+		$userName = $request->input('user_name');   // only used if no user_id
 		$userMail = $request->input('user_email');
-		$isRead   = $request->input('is_read'); // 0|1|null
+		$isRead   = $request->input('is_read');     // 0|1|null
 
-		$start = $request->filled('start') ? \Carbon\Carbon::parse($request->input('start')) : null;
-		$end   = $request->filled('end')   ? \Carbon\Carbon::parse($request->input('end'))   : null;
+		// If we have neither an auth user nor explicit (name+email), bail early
+		if (empty($userId) && !(filled($userName) && filled($userMail))) {
+			return response()->json([
+				'message' => 'Authenticated user not found. Provide user_id or user_name + user_email.',
+				'errors'  => ['user' => ['Authenticated user not found. Provide user_id or user_name + user_email.']],
+			], 422);
+		}
 
-		$include = strtolower((string)$request->input('include', ''));
+		// Optional window
+		$start = $request->filled('start') ? Carbon::parse($request->input('start')) : null;
+		$end   = $request->filled('end')   ? Carbon::parse($request->input('end'))   : null;
+
+		$include = strtolower((string) $request->input('include', ''));
 		$per     = (int) $request->input('per_page', 15);
 
-		// Sorting: support new columns
+		// Sorting
 		$sortInput = (string) $request->input('sort', 'date');
 		$dir  = str_starts_with($sortInput, '-') ? 'desc' : 'asc';
 		$col  = ltrim($sortInput, '-');
@@ -679,18 +705,20 @@ class MeetingDetailController extends Controller
 			$col = 'date';
 		}
 
-		// User + is_read matcher for propagations
+		// Build the propagation matcher
 		$matchUser = function ($q) use ($userId, $userName, $userMail, $isRead) {
-			$q->when($userId, fn($qq) => $qq->where('user_id', $userId))
-			->when(!$userId && $userName && $userMail, fn($qq) =>
-					$qq->where('user_name', $userName)->where('user_email', $userMail)
-			)
-			->when(!is_null($isRead), fn($qq) =>
-					$qq->where('is_read', (int) $isRead)
-			);
+			if (!empty($userId)) {
+				$q->where('user_id', $userId);
+			} else {
+				// only when user_id absent and both provided
+				$q->where('user_name', $userName)->where('user_email', $userMail);
+			}
+			if (!is_null($isRead)) {
+				$q->where('is_read', (int) $isRead);
+			}
 		};
 
-		$q = \App\Models\MeetingDetail::query()
+		$q = MeetingDetail::query()
 			// optional parent meeting filter by is_active
 			->when(!is_null($request->input('is_active')), fn($qq) =>
 				$qq->whereHas('meeting', fn($m) => $m->where('is_active', (int) $request->boolean('is_active')))
@@ -716,11 +744,11 @@ class MeetingDetailController extends Controller
 			->whereHas('propagations', $matchUser)
 			// counts only matching rows
 			->withCount(['propagations as user_propagations_count' => $matchUser])
-			// include propagations if requested
-			->when(str_contains($include, 'propagations'), fn($qq) => $qq->with(['propagations' => $matchUser]))
-			// ALWAYS include meeting summary so you get title/capacity in response
+			// ALWAYS include meeting summary (so you see title/capacity)
 			->with(['meeting:id,title,capacity,is_active'])
-			// order
+			// include propagations only if requested
+			->when(str_contains($include, 'propagations'), fn($qq) => $qq->with(['propagations' => $matchUser]))
+			// ordering
 			->orderBy($col, $dir);
 
 		if ($col !== 'date') {
@@ -747,8 +775,10 @@ class MeetingDetailController extends Controller
 			'per_page'     => $paginator->perPage(),
 			'total'        => $paginator->total(),
 			'last_page'    => $paginator->lastPage(),
+
+			// Echoed filters
 			'filters' => [
-				'user_id'    => $userId,
+				'user_id'    => $userId,                 // now defaults to Auth::id()
 				'user_name'  => $userName,
 				'user_email' => $userMail,
 				'start'      => $request->input('start'),
@@ -760,8 +790,6 @@ class MeetingDetailController extends Controller
 			'sort'    => $sortInput,
 		]);
 	}
-
-
 
 	public function markAsRead(Request $request, $id)
 	{
