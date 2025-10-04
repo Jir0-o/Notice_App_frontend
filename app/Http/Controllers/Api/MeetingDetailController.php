@@ -665,9 +665,8 @@ class MeetingDetailController extends Controller
 		$userMail = $request->input('user_email');
 		$isRead   = $request->input('is_read'); // 0|1|null
 
-		// Optional window: 'start' and 'end' may be date or datetime strings
-		$start = $request->filled('start') ? Carbon::parse($request->input('start')) : null;
-		$end   = $request->filled('end')   ? Carbon::parse($request->input('end'))   : null;
+		$start = $request->filled('start') ? \Carbon\Carbon::parse($request->input('start')) : null;
+		$end   = $request->filled('end')   ? \Carbon\Carbon::parse($request->input('end'))   : null;
 
 		$include = strtolower((string)$request->input('include', ''));
 		$per     = (int) $request->input('per_page', 15);
@@ -676,7 +675,7 @@ class MeetingDetailController extends Controller
 		$sortInput = (string) $request->input('sort', 'date');
 		$dir  = str_starts_with($sortInput, '-') ? 'desc' : 'asc';
 		$col  = ltrim($sortInput, '-');
-		if (!in_array($col, ['date','start_time','created_at'])) {
+		if (!in_array($col, ['date','start_time','created_at'], true)) {
 			$col = 'date';
 		}
 
@@ -684,24 +683,23 @@ class MeetingDetailController extends Controller
 		$matchUser = function ($q) use ($userId, $userName, $userMail, $isRead) {
 			$q->when($userId, fn($qq) => $qq->where('user_id', $userId))
 			->when(!$userId && $userName && $userMail, fn($qq) =>
-				$qq->where('user_name', $userName)->where('user_email', $userMail)
+					$qq->where('user_name', $userName)->where('user_email', $userMail)
 			)
 			->when(!is_null($isRead), fn($qq) =>
-				$qq->where('is_read', (int) $isRead) // 0/1
+					$qq->where('is_read', (int) $isRead)
 			);
 		};
 
-		$q = MeetingDetail::query()
-			// optional filter parent meeting by is_active
+		$q = \App\Models\MeetingDetail::query()
+			// optional parent meeting filter by is_active
 			->when(!is_null($request->input('is_active')), fn($qq) =>
 				$qq->whereHas('meeting', fn($m) => $m->where('is_active', (int) $request->boolean('is_active')))
 			)
-			// time/date filtering based on new columns
+			// time/date filtering on (date, start_time, end_time)
 			->when($start && $end, function ($qq) use ($start, $end) {
 				$startDate = $start->toDateString();
 				$endDate   = $end->toDateString();
 
-				// Same-day window → exact date + time overlap
 				if ($startDate === $endDate) {
 					$startTime = $start->format('H:i');
 					$endTime   = $end->format('H:i');
@@ -710,26 +708,21 @@ class MeetingDetailController extends Controller
 					->where('start_time', '<', $endTime)   // strict overlap
 					->where('end_time',   '>', $startTime);
 				} else {
-					// Multi-day range → date BETWEEN (inclusive)
 					$qq->whereDate('date', '>=', $startDate)
 					->whereDate('date', '<=', $endDate);
 				}
 			})
-			// must have at least one matching propagation for this user
+			// must have at least one matching propagation
 			->whereHas('propagations', $matchUser)
-			// helpful count (only matching rows)
+			// counts only matching rows
 			->withCount(['propagations as user_propagations_count' => $matchUser])
-			// includes
-			->when(str_contains($include, 'meeting'), fn($qq) =>
-				$qq->with('meeting:id,title,capacity,is_active')
-			)
-			->when(str_contains($include, 'propagations'), fn($qq) =>
-				$qq->with(['propagations' => $matchUser])
-			)
-			// primary ordering
+			// include propagations if requested
+			->when(str_contains($include, 'propagations'), fn($qq) => $qq->with(['propagations' => $matchUser]))
+			// ALWAYS include meeting summary so you get title/capacity in response
+			->with(['meeting:id,title,capacity,is_active'])
+			// order
 			->orderBy($col, $dir);
 
-		// Secondary ordering for stable results (date then time) if primary isn't start_time
 		if ($col !== 'date') {
 			$q->orderBy('date', 'asc');
 		}
@@ -740,27 +733,20 @@ class MeetingDetailController extends Controller
 		$paginator = $q->paginate($per)->appends($request->query());
 
 		return response()->json([
-			// Pass only items() to avoid Laravel’s default meta wrapper
 			'data'  => \App\Http\Resources\MeetingDetailResource::collection($paginator->items()),
 			'ok'    => true,
-
-			// Flat pagination links
 			'links' => [
 				'first' => $paginator->url(1),
 				'last'  => $paginator->url($paginator->lastPage()),
 				'prev'  => $paginator->previousPageUrl(),
 				'next'  => $paginator->nextPageUrl(),
 			],
-
-			// Flat pagination numbers
 			'current_page' => $paginator->currentPage(),
 			'from'         => $paginator->firstItem(),
 			'to'           => $paginator->lastItem(),
 			'per_page'     => $paginator->perPage(),
 			'total'        => $paginator->total(),
 			'last_page'    => $paginator->lastPage(),
-
-			// Echo filters (use raw input strings so client sees what they sent)
 			'filters' => [
 				'user_id'    => $userId,
 				'user_name'  => $userName,
@@ -774,6 +760,7 @@ class MeetingDetailController extends Controller
 			'sort'    => $sortInput,
 		]);
 	}
+
 
 
 	public function markAsRead(Request $request, $id)
