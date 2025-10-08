@@ -16,6 +16,8 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Api\MeetingController;
 use App\Http\Controllers\Api\MeetingDetailController;
 use App\Http\Controllers\Api\MeetingAvailabilityController;
+use App\Http\Controllers\Api\NoticeTemplateController;
+
 
 
 /*
@@ -85,6 +87,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('meetings-details', MeetingDetailController::class);
 
         Route::get('v1/meetings/free', [MeetingAvailabilityController::class, 'free'])->name('meetings.free');
+
+        // for notice templates
+        Route::get   ('/notice-templates',        [NoticeTemplateController::class, 'index']);
+        Route::post  ('/notice-templates',        [NoticeTemplateController::class, 'store']);
+        Route::get   ('/notice-templates/{id}',   [NoticeTemplateController::class, 'show']);
+        Route::match(['put','patch'], '/notice-templates/{id}', [NoticeTemplateController::class, 'update']);
+        Route::delete('/notice-templates/{id}',   [NoticeTemplateController::class, 'destroy']);
     });
 });
 
