@@ -64,7 +64,7 @@ class UserController extends Controller
             'password'       => 'required|string|min:6',
             'designation_id' => 'nullable|exists:designations,id',
             'department_id'  => 'nullable|exists:departments,id',
-            'status'         => ['required', Rule::in(['active','inactive'])],
+            'status'         => ['nullable', Rule::in(['active','inactive'])],
             'is_active'      => 'boolean',
             'phone'          => 'nullable|string|max:20',
             'roles'          => 'sometimes|array',

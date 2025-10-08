@@ -76,7 +76,7 @@
             @if(isset($notice->priority_level))
                 <span><strong>Priority:</strong> {{ ucfirst($notice->priority_level) }} &nbsp;|&nbsp;</span>
             @endif
-            <span><strong>Status:</strong> {{ ucfirst($notice->status) }}</span>
+            {{-- <span><strong>Status:</strong> {{ ucfirst($notice->status) }}</span> --}}
             <br>
             <span>
                 <strong>Published at:</strong>
