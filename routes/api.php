@@ -94,6 +94,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get   ('/notice-templates/{id}',   [NoticeTemplateController::class, 'show']);
         Route::match(['put','patch'], '/notice-templates/{id}', [NoticeTemplateController::class, 'update']);
         Route::delete('/notice-templates/{id}',   [NoticeTemplateController::class, 'destroy']);
+
+        Route::get('/notice-templates/{id}/download-pdf', [NoticeTemplateController::class, 'download']);
+
     });
 });
 

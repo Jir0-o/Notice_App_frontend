@@ -6,10 +6,11 @@ use App\Models\NoticeTemplate;
 use App\Models\NoticeTemplateDistribution;
 use App\Models\NoticeTemplateRegard;
 use App\Models\User;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Log;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
 
 class NoticeTemplateController extends Controller
 {
@@ -21,7 +22,7 @@ class NoticeTemplateController extends Controller
     {
         $perPage = (int) $request->get('per_page', 10);
 
-        $data = NoticeTemplate::with(['distributions', 'regards', 'user'])
+        $data = NoticeTemplate::with(['distributions', 'regards', 'user.designation'])
             ->latest('id')
             ->paginate($perPage);
 
@@ -34,7 +35,7 @@ class NoticeTemplateController extends Controller
      */
     public function show($id)
     {
-        $tpl = NoticeTemplate::with(['distributions', 'regards', 'user'])
+        $tpl = NoticeTemplate::with(['distributions', 'regards', 'user.designation'])
             ->findOrFail($id);
 
         return response()->json($tpl);
@@ -255,4 +256,51 @@ class NoticeTemplateController extends Controller
 			$tpl->regards()->createMany($rows);
 		}
 	}
+
+	public function download($id)
+    {
+        $template = NoticeTemplate::with(['distributions','regards','user.designation'])
+            ->findOrFail($id);
+
+        $data = [
+            // fixed header lines (Bangla)
+            'header_lines' => [
+                'গণপ্রজাতন্ত্রী বাংলাদেশ সরকার',
+                'অর্থ বিভাগ, অর্থ মন্ত্রণালয়',
+                'স্কিলস ফর ইন্ডাস্ট্রি কম্পিটিটিভনেস এন্ড ইনোভেশন প্রোগ্রাম (SICIP)',
+                'প্রবাসী কল্যাণ ভবন (১৫-১৬ তলা)',
+                '৭১-৭২, ইস্টার্ন গার্ডেন, রমনা, ঢাকা-১০০০',
+                'https://sicib.gov.bd',
+            ],
+
+            // dynamic
+            'memorial_no'     => $template->memorial_no,
+            'date_bn'         => $this->bnDigits($template->date->format('d/m/Y')),
+            'subject'         => $template->subject,
+            'body'            => $template->body,
+
+            // signature (name from user, extra body from template)
+            'sign_name'       => $template->user->name ?? '',
+            'sign_designation'=> optional($template->user->designation)->name,
+            'signature_body'  => $template->signature_body ?? '',
+
+            // lists
+            'distributions'   => $template->distributions,   // name, designation
+            'regards'         => $template->regards,         // name, designation, note
+        ];
+
+        // load blade -> pdf
+        $pdf = Pdf::loadView('pdf.notice_template', $data);
+
+        // download as attachment
+        $filename = 'notice_'.$template->memorial_no.'.pdf';
+        return $pdf->download($filename);
+    }
+
+    private function bnDigits(string $s): string
+    {
+        $en = ['0','1','2','3','4','5','6','7','8','9','-','/'];
+        $bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯','-','/'];
+        return str_replace($en, $bn, $s);
+    }
 }
