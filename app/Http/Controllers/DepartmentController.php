@@ -276,7 +276,7 @@ class DepartmentController extends Controller
     {
         try {
             $dept = Department::findOrFail($id);
-            $users = $dept->users()->where('is_active', 1)->where('status', 'Active')->get();
+            $users = $dept->users()->where('is_active', 1)->where('status', 'Active')->with('designation')->get();
 
             return response()->json([
                 'success' => true,

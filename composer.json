@@ -15,6 +15,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.8",
         "livewire/livewire": "^3.0",
+        "mpdf/mpdf": "*",
         "spatie/laravel-permission": "^6.21"
     },
     "require-dev": {

@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Log;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Mpdf\Mpdf;
 
 class NoticeTemplateController extends Controller
 {
@@ -259,11 +260,9 @@ class NoticeTemplateController extends Controller
 
 	public function download($id)
     {
-        $template = NoticeTemplate::with(['distributions','regards','user.designation'])
-            ->findOrFail($id);
+        $template = NoticeTemplate::with(['distributions','regards','user.designation'])->findOrFail($id);
 
         $data = [
-            // fixed header lines (Bangla)
             'header_lines' => [
                 'গণপ্রজাতন্ত্রী বাংলাদেশ সরকার',
                 'অর্থ বিভাগ, অর্থ মন্ত্রণালয়',
@@ -272,32 +271,41 @@ class NoticeTemplateController extends Controller
                 '৭১-৭২, ইস্টার্ন গার্ডেন, রমনা, ঢাকা-১০০০',
                 'https://sicib.gov.bd',
             ],
-
-            // dynamic
-            'memorial_no'     => $template->memorial_no,
-            'date_bn'         => $this->bnDigits($template->date->format('d/m/Y')),
-            'subject'         => $template->subject,
-            'body'            => $template->body,
-
-            // signature (name from user, extra body from template)
-            'sign_name'       => $template->user->name ?? '',
-            'sign_designation'=> optional($template->user->designation)->name,
-            'signature_body'  => $template->signature_body ?? '',
-
-            // lists
-            'distributions'   => $template->distributions,   // name, designation
-            'regards'         => $template->regards,         // name, designation, note
+            'memorial_no'      => $template->memorial_no,
+            'date_bn'          => $this->bnDigits($template->date->format('d/m/Y')),
+            'subject'          => $template->subject,
+            'body'             => $template->body,
+            'sign_name'        => $template->user->name ?? '',
+            'sign_designation' => optional($template->user->designation)->name,
+            'signature_body'   => $template->signature_body ?? '',
+            'distributions'    => $template->distributions,
+            'regards'          => $template->regards,
         ];
 
-        // load blade -> pdf
-        $pdf = Pdf::loadView('pdf.notice_template', $data);
+        $html = view('pdf.notice_template', $data)->render();
 
-        // download as attachment
-        $filename = 'notice_'.$template->memorial_no.'.pdf';
-        return $pdf->download($filename);
+        // Set up mPDF with Bangla font
+        $mpdf = new Mpdf([
+            'default_font' => 'nikosh',
+            'tempDir'      => storage_path('fonts'),
+        ]);
+
+        // Add Bangla font (Nikosh / SolaimanLipi / Noto Sans Bengali)
+        $fontPath = storage_path('fonts/NotoSansBengali-Regular.ttf');
+        $mpdf->AddFontDirectory(storage_path('fonts'));
+        $mpdf->fontdata['nikosh'] = [
+            'R' => $fontPath,
+            'B' => $fontPath,
+        ];
+        $mpdf->SetFont('nikosh');
+
+        $mpdf->WriteHTML($html);
+        return response($mpdf->Output('', 'S'))
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="notice_'.$template->memorial_no.'.pdf"');
     }
 
-    private function bnDigits(string $s): string
+    private function bnDigits($s)
     {
         $en = ['0','1','2','3','4','5','6','7','8','9','-','/'];
         $bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯','-','/'];
