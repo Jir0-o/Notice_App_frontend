@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Notice</title>
@@ -7,7 +7,7 @@
     @page { margin: 28mm 18mm 28mm 18mm; }
     @font-face{
 		font-family: 'notosansbengali';
-		src: url('{{ storage_path('fonts/BL Fiona Bangla Unicode.ttf') }}') format('truetype');
+		src: url('{{ storage_path('framework/fonts/NotoSansBengali-Regular.ttf') }}') format('truetype');
 		font-weight: normal;
 		font-style: normal;
 	}

@@ -20,6 +20,7 @@ return new class extends Migration
             $table->unsignedBigInteger('department_id')->nullable();
             $table->unsignedBigInteger('designation_id')->nullable();
             $table->text('fcm_token')->unique()->nullable();
+            $table->text('signature_path')->nullable();
             $table->foreign('department_id')
                 ->references('id')
                 ->on('departments');

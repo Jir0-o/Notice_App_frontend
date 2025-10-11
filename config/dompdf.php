@@ -18,8 +18,8 @@ return [
             'useKashida'=> 75,
         ],
         'notosansbengali' => [
-            'R'         => 'BL Fiona Bangla Unicode.ttf',
-            'B'         => 'BL Fiona Bangla Italic.ttf',
+            'R'         => 'NotoSansBengali-Regular.ttf',  // put this file at storage/fonts/NotoSansBengali-Regular.ttf
+            'B'         => 'NotoSansBengali-Bold.ttf',     // put this file at storage/fonts/NotoSansBengali-Bold.ttf
             'useOTL'    => 0xFF,
             'useKashida'=> 75,
         ],

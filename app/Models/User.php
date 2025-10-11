@@ -42,6 +42,7 @@ class User extends Authenticatable
         'password',
         'designation_id',
         'department_id',
+        'signature_path',
         'status',
     ];
 

@@ -80,8 +80,19 @@ class UserController extends Controller
         }
 
         try {
+
+            if($request->hasFile('signature')){
+                $signature = $request->file('signature');
+                $signatureName = url('user_images/signature') . '/' . date('ymd') . '.' . time() . '.' . $signature->getClientOriginalName();
+                $signature->move(base_path('public/user_images/signature'), $signatureName);
+                $signature = $signatureName;
+            } else {
+                $signature = null;
+            }
+
             $data = $v->validated();
             $data['password'] = bcrypt($data['password']);
+            $data['signature_path'] = $signature;
 
             // 2) Create user
             $user = User::create($data);

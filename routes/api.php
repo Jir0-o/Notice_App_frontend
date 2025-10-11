@@ -95,8 +95,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::match(['put','patch'], '/notice-templates/{id}', [NoticeTemplateController::class, 'update']);
         Route::delete('/notice-templates/{id}',   [NoticeTemplateController::class, 'destroy']);
 
-        Route::get('/notice-templates/{id}/download-pdf', [NoticeTemplateController::class, 'download']);
+        // JSON ONLY — no PDF here
+        Route::get('/notice-templates/{id}', [NoticeTemplateController::class, 'showApi'])
+            ->name('api.notice.show');
 
+        // routes/api.php
+        Route::get('/notice-templates/{id}/pdf', [NoticeTemplateController::class, 'download'])
+            ->name('api.notice.pdf');
     });
 });
 

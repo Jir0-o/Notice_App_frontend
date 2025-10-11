@@ -10,6 +10,11 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/print/notice/{id}', function () {
+    // Returns a static view; JS will fetch by window.location
+    return view('pdf.notice_template');
+})->name('notice.print');
+
 Route::middleware([
     'auth:sanctum',
     config('jetstream.auth_session'),
