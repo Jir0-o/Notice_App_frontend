@@ -50,7 +50,7 @@ class SendMeetingEmailsJob implements ShouldQueue
 
             $recipientName = $prop->name ?: ($prop->user?->name ?? null);
 
-
+            Log::debug( $meetingDetails->title);
 
             try {
                 if ($prop->user && $prop->user->fcm_token) {
@@ -96,7 +96,7 @@ class SendMeetingEmailsJob implements ShouldQueue
                 ],
                 'data' => [
                     'payload' => json_encode([
-                        'screen' => 'details',
+                        'screen' => 'home',
                         'id' => $this->meetingDetailsId,
                     ]),
                 ],
