@@ -96,8 +96,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/notice-templates/{id}',   [NoticeTemplateController::class, 'destroy']);
 
         // JSON ONLY — no PDF here
-        Route::get('/notice-templates/{id}', [NoticeTemplateController::class, 'showApi'])
-            ->name('api.notice.show');
+        // Route::get('/notice-templates/{id}', [NoticeTemplateController::class, 'showApi'])
+        //     ->name('api.notice.show');
 
         // routes/api.php
         Route::get('/notice-templates/{id}/pdf', [NoticeTemplateController::class, 'download'])

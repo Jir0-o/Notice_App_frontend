@@ -39,13 +39,17 @@
     <link rel="stylesheet" href="{{asset('template/assets/vendor/libs/apex-charts/apex-charts.css')}}" />
     {{-- Datatable CSS --}}
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" />
+
     <!-- Page CSS -->
+
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
 
     <!-- Helpers -->
     <script src="{{asset('template/assets/vendor/js/helpers.js')}}"></script>
     <!--! Template customizer & Theme config files MUST be included after core stylesheets and helpers.js in the <head> section -->
     <!--? Config:  Mandatory theme config file contain global vars & default theme options, Set your preferred theme option in this file.  -->
     <script src="{{asset('template/assets/js/config.js')}}"></script>
+
 
 
   </head>
@@ -104,6 +108,8 @@
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
 
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
     <!-- Place this tag in your head or just before your close body tag. -->
     <script async defer src="https://buttons.github.io/buttons.js"></script>
     <script>
@@ -111,5 +117,54 @@
         new DataTable('#datatable1');
         new DataTable('#datatable2');
     </script>
+
+    <script>
+        (function () {
+          const token = localStorage.getItem('api_token');
+
+          // Pages that should be blocked if you're already logged in:
+          const loginLikePaths = ['/ext/login', '/login', '/register'];
+
+          // Decide where to push the user when logged in
+          function goDashboardByRole(role){
+            if(role === 'Super Admin') return '/dashboard';
+            if(role === 'Admin')       return '/meetings';
+            return '/user/meetings';
+          }
+
+          async function getRole(){
+            try{
+              const base = "{{ rtrim(config('app.url') ?: request()->getSchemeAndHttpHost(), '/') }}";
+              const res = await fetch(base + '/api/profile', {
+                headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' }
+              });
+              if(!res.ok) return null;
+              const json = await res.json();
+              return json?.data?.role || null;
+            }catch(e){ return null; }
+          }
+
+          (async function main(){
+            const path = window.location.pathname;
+
+            // If NOT logged in and page requires login, bounce to login
+            const mustBeAuthed = [
+              '/user-profile','/user-notices','/user-notices/', '/user/meetings',
+              '/meetings','/view-notices','/rooms','/settings'
+            ];
+            if(!token && mustBeAuthed.some(p => path.startsWith(p))){
+              window.location.replace('/ext/login');
+              return;
+            }
+
+            // If logged in and on a login-like page, bounce to dashboard
+            if(token && loginLikePaths.includes(path)){
+              const role = await getRole();
+              window.location.replace(goDashboardByRole(role));
+            }
+          })();
+        })();
+        </script>
+
   </body>
 </html>

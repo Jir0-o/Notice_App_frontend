@@ -36,6 +36,53 @@
     @livewireScripts
     <!-- MDB -->
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/7.0.0/mdb.umd.min.js"></script>
+        <script>
+        (function () {
+          const token = localStorage.getItem('api_token');
+
+          // Pages that should be blocked if you're already logged in:
+          const loginLikePaths = ['/','/ext/login', '/login', '/register'];
+
+          // Decide where to push the user when logged in
+          function goDashboardByRole(role){
+            if(role === 'Super Admin') return '/dashboard';
+            if(role === 'Admin')       return '/meetings';
+            return '/user/meetings';
+          }
+
+          async function getRole(){
+            try{
+              const base = "{{ rtrim(config('app.url') ?: request()->getSchemeAndHttpHost(), '/') }}";
+              const res = await fetch(base + '/api/profile', {
+                headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' }
+              });
+              if(!res.ok) return null;
+              const json = await res.json();
+              return json?.data?.role || null;
+            }catch(e){ return null; }
+          }
+
+          (async function main(){
+            const path = window.location.pathname;
+
+            // If NOT logged in and page requires login, bounce to login
+            const mustBeAuthed = [
+              '/user-profile','/user-notices','/user-notices/', '/user/meetings',
+              '/meetings','/view-notices','/rooms','/settings'
+            ];
+            if(!token && mustBeAuthed.some(p => path.startsWith(p))){
+              window.location.replace('/ext/login');
+              return;
+            }
+
+            // If logged in and on a login-like page, bounce to dashboard
+            if(token && loginLikePaths.includes(path)){
+              const role = await getRole();
+              window.location.replace(goDashboardByRole(role));
+            }
+          })();
+        })();
+        </script>
 </body>
 
 </html>

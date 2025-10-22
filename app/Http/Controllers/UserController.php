@@ -57,7 +57,6 @@ class UserController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        // 1) Validate, including roles by name
         $v = Validator::make($request->all(), [
             'name'           => 'required|string|max:255',
             'email'          => 'required|email|unique:users,email',
@@ -69,6 +68,7 @@ class UserController extends Controller
             'phone'          => 'nullable|string|max:20',
             'roles'          => 'sometimes|array',
             'roles.*'        => 'string|exists:roles,name',
+            'signature'      => 'nullable|file|mimes:png,jpg,jpeg,pdf|max:5120',
         ]);
 
         if ($v->fails()) {
@@ -80,27 +80,31 @@ class UserController extends Controller
         }
 
         try {
+            $signaturePath = null;
 
-            if($request->hasFile('signature')){
-                $signature = $request->file('signature');
-                $signatureName = url('user_images/signature') . '/' . date('ymd') . '.' . time() . '.' . $signature->getClientOriginalName();
-                $signature->move(base_path('public/user_images/signature'), $signatureName);
-                $signature = $signatureName;
-            } else {
-                $signature = null;
+            if ($request->hasFile('signature')) {
+                $file = $request->file('signature');
+                $filename = time().'_'.preg_replace('/\s+/', '_', $file->getClientOriginalName());
+                $dest = public_path('user_images/signature');
+                if (!file_exists($dest)) mkdir($dest, 0755, true);
+
+                $file->move($dest, $filename);
+
+                // relative path (publicly accessible)
+                $signaturePath = 'user_images/signature/'.$filename;
             }
 
             $data = $v->validated();
             $data['password'] = bcrypt($data['password']);
-            $data['signature_path'] = $signature;
+            $data['signature_path'] = $signaturePath;
 
-            // 2) Create user
             $user = User::create($data);
 
-            // 3) Assign roles if provided
             if (!empty($data['roles'])) {
                 $user->syncRoles($data['roles']);
             }
+
+            $user->signature_url = $signaturePath ? url($signaturePath) : null;
 
             return response()->json([
                 'success' => true,
@@ -117,6 +121,8 @@ class UserController extends Controller
             ], 500);
         }
     }
+
+
 
     public function show(int $id): JsonResponse
     {
@@ -139,7 +145,6 @@ class UserController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        // 1) Validate, including roles by name
         $v = Validator::make($request->all(), [
             'name'           => 'sometimes|required|string|max:255',
             'email'          => "sometimes|required|email",
@@ -149,6 +154,7 @@ class UserController extends Controller
             'phone'          => 'nullable|string|max:20',
             'roles'          => 'sometimes|array',
             'roles.*'        => 'string|exists:roles,name',
+            'signature'      => 'nullable|file|mimes:png,jpg,jpeg,pdf|max:5120',
         ]);
 
         if ($v->fails()) {
@@ -163,20 +169,35 @@ class UserController extends Controller
             $user = User::findOrFail($id);
             $data = $v->validated();
 
-            // 2) Hash password if changed
             if (!empty($data['password'])) {
                 $data['password'] = bcrypt($data['password']);
             } else {
                 unset($data['password']);
             }
 
-            // 3) Update user fields
+            // handle new signature upload
+            if ($request->hasFile('signature')) {
+                // remove old signature if exists
+                if ($user->signature_path && file_exists(public_path($user->signature_path))) {
+                    @unlink(public_path($user->signature_path));
+                }
+
+                $file = $request->file('signature');
+                $filename = time().'_'.preg_replace('/\s+/', '_', $file->getClientOriginalName());
+                $dest = public_path('user_images/signature');
+                if (!file_exists($dest)) mkdir($dest, 0755, true);
+
+                $file->move($dest, $filename);
+                $data['signature_path'] = 'user_images/signature/'.$filename;
+            }
+
             $user->update($data);
 
-            // 4) Sync roles if provided
             if (array_key_exists('roles', $data)) {
                 $user->syncRoles($data['roles'] ?? []);
             }
+
+            $user->signature_url = $user->signature_path ? url($user->signature_path) : null;
 
             return response()->json([
                 'success' => true,
@@ -199,6 +220,7 @@ class UserController extends Controller
             ], 500);
         }
     }
+
 
     public function destroy(int $id): JsonResponse
     {
