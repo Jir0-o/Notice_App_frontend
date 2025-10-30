@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\MeetingDetailspropagation;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -272,23 +273,109 @@ class DepartmentController extends Controller
         }
     }
 
-    public function departmentBasedUsers(int $id): JsonResponse
+    public function departmentBasedUsers(Request $request, int $id): JsonResponse
     {
+        // time window to check
+        $data = $request->validate([
+            'date'       => ['required','date'],
+            'start_time' => ['required','date_format:H:i'],
+            'end_time'   => ['required','date_format:H:i','after:start_time'],
+        ]);
+
+        $date      = \Carbon\Carbon::parse($data['date'])->toDateString();
+        $startTime = $data['start_time'];
+        $endTime   = $data['end_time'];
+
         try {
+            // 1. get dept
             $dept = Department::findOrFail($id);
-            $users = $dept->users()->where('is_active', 1)->where('status', 'Active')->with('designation')->get();
+
+            // 2. get ALL active users of that dept
+            $users = $dept->users()
+                ->where('is_active', 1)
+                ->where('status', 'Active')
+                ->with('designation')
+                ->get(['id','name','email','designation_id','department_id']);
+
+            if ($users->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No users found for this department.',
+                    'window'  => [
+                        'date'       => $date,
+                        'start_time' => $startTime,
+                        'end_time'   => $endTime,
+                    ],
+                    'data'    => [],
+                ], 200);
+            }
+
+            // 3. pull all busy records for these users in that window
+            $userIds = $users->pluck('id')->values();
+
+            $busy = MeetingDetailspropagation::query()
+                ->whereIn('user_id', $userIds)
+                ->whereHas('meetingDetail', function ($md) use ($date, $startTime, $endTime) {
+                    $md->whereDate('date', $date)
+                    ->where('start_time', '<', $endTime)
+                    ->where('end_time',   '>', $startTime);
+                })
+                ->with([
+                    'meetingDetail:id,meeting_id,title,date,start_time,end_time',
+                    'meetingDetail.meeting:id,title',
+                ])
+                ->get(['id','user_id','meeting_detail_id']);
+
+            // group busy rows by user_id
+            $busyByUser = $busy->groupBy('user_id');
+
+            // 4. map users -> add is_busy flag
+            $payload = $users->map(function ($u) use ($busyByUser) {
+                $conflicts = $busyByUser->get($u->id, collect());
+
+                return [
+                    'id'          => $u->id,
+                    'name'        => $u->name,
+                    'email'       => $u->email,
+                    'designation' => $u->designation?->name,
+                    'is_busy'     => $conflicts->isNotEmpty(),
+                    'conflicts'   => $conflicts->map(function ($c) {
+                        return [
+                            'propagation_id'    => $c->id,
+                            'meeting_detail_id' => $c->meeting_detail_id,
+                            'meeting_title'     => optional($c->meetingDetail->meeting)->title,
+                            'detail_title'      => $c->meetingDetail->title ?? null,
+                            'date'              => optional($c->meetingDetail->date)?->toDateString(),
+                            'start_time'        => optional($c->meetingDetail->start_time)?->format('H:i'),
+                            'end_time'          => optional($c->meetingDetail->end_time)?->format('H:i'),
+                        ];
+                    })->values(),
+                    // simple msg for UI
+                    'busy_msg'    => $conflicts->isNotEmpty()
+                        ? 'This user is in another meeting in this time window.'
+                        : null,
+                ];
+            })->values();
 
             return response()->json([
                 'success' => true,
-                'data'    => $users,
-                'message' => $users->count() ? 'Department users fetched successfully.' : 'No users found for this department.',
+                'message' => 'Department users with busy flags fetched.',
+                'window'  => [
+                    'date'       => $date,
+                    'start_time' => $startTime,
+                    'end_time'   => $endTime,
+                ],
+                'data'    => $payload,
             ], 200);
 
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['success'=>false,'message'=>'Department not found.'], 404);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Department not found.',
+            ], 404);
 
-        } catch (Throwable $e) {
-            Log::error("Error fetching department users: {$e->getMessage()}");
+        } catch (\Throwable $e) {
+            Log::error("Error fetching department users with busy flags: {$e->getMessage()}");
             return response()->json([
                 'success' => false,
                 'message' => 'Could not retrieve department users.',
@@ -296,4 +383,5 @@ class DepartmentController extends Controller
             ], 500);
         }
     }
+
 }
