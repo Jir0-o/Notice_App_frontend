@@ -108,6 +108,8 @@ Route::middleware('auth:sanctum')->group(function () {
         // routes/api.php
         Route::get('/notice-templates/{id}/pdf', [NoticeTemplateController::class, 'download'])
             ->name('api.notice.pdf');
+
+        Route::get('/meetings/conflicts/user', [MeetingAvailabilityController::class, 'checkUser'])->name('meetings.conflicts.user');
     });
 });
 
