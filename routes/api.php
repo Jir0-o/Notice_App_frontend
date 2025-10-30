@@ -17,8 +17,8 @@ use App\Http\Controllers\Api\MeetingController;
 use App\Http\Controllers\Api\MeetingDetailController;
 use App\Http\Controllers\Api\MeetingAvailabilityController;
 use App\Http\Controllers\Api\NoticeTemplateController;
-
-
+use App\Http\Controllers\Api\MeetingAttachmentController;
+use App\Http\Controllers\Api\MeetingReminderCronController;
 
 /*
 |--------------------------------------------------------------------------
@@ -57,6 +57,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // mark meeting detail propagation as read
         Route::post('meeting-details/{id}/read', [MeetingDetailController::class, 'markAsRead'])->name('meeting-details.read');
+
+        Route::get('/meeting-details/{meetingDetail}/attachments', [MeetingAttachmentController::class, 'index'])->name('meeting-details.attachments.index');
+        Route::get('/meeting-attachments/{attachment}/download', [MeetingAttachmentController::class, 'downloadOne'])->name('meeting-attachments.download');
+        Route::get('/meeting-details/{meetingDetail}/attachments/download-all', [MeetingAttachmentController::class, 'downloadAll'])->name('meeting-attachments.download-all');
+
+        Route::get('/cron/meeting-reminders', MeetingReminderCronController::class)->name('cron.meeting-reminders');
     });
 
     // for profile update

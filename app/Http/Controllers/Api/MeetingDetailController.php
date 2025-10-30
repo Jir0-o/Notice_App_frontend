@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Http\Requests\MeetingDetailsByUserRequest;
 use App\Jobs\SendMeetingEmailsJob;
+use App\Models\MeetingAttachment;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -34,7 +36,7 @@ class MeetingDetailController extends Controller
     // GET /api/meetings-details
 	public function index(Request $request)
 	{
-		$q = MeetingDetail::query();
+		$q = MeetingDetail::query()->with('meetingAttachments');
 
 		// ---- Optional filters ----
 		if ($s = $request->query('search')) {
@@ -109,7 +111,7 @@ class MeetingDetailController extends Controller
 		}
 
 		// Counts
-		$q->withCount('propagations');
+		$q->withCount('propagations', 'meetingAttachments');
 
 		// ---- Pagination ----
 		$perPage   = (int) $request->query('per_page', 15);
@@ -158,33 +160,50 @@ class MeetingDetailController extends Controller
 	{
 		DB::beginTransaction();
 		try {
-			// ---- VALIDATION (adds extra rules for internal/external split) ----
+			// 1) validate
 			$request->validate([
-				'title'         => 'required|string|max:255',
-				'date'          => 'required|date',
-				'start_time'    => 'required|date_format:H:i',
-				'end_time'      => 'required|date_format:H:i|after:start_time',
-				'meeting_id'    => 'required|integer|exists:meetings,id',
-				'internal_users'=> 'nullable|array',
-				'internal_users.*' => 'integer|exists:users,id',
-				'external_users'=> 'nullable|array',
+				'title'          => 'required|string|max:255',
+				'date'           => 'required|date',
+				'start_time'     => 'required|date_format:H:i',
+				'end_time'       => 'required|date_format:H:i|after:start_time',
+				'meeting_id'     => 'required|integer|exists:meetings,id',
+				'agenda'         => 'nullable|string',
+
+				// attendees
+				'internal_users'     => 'nullable|array',
+				'internal_users.*'   => 'integer|exists:users,id',
+				'external_users'     => 'nullable|array',
 				'external_users.*.email' => 'required_with:external_users|email',
 				'external_users.*.name'  => 'required_with:external_users|string|max:255',
+
+				// attachments (multiple)
+				'attachments'        => 'nullable|array',
+				'attachments.*'      => 'file|max:10240', // 10MB each, adjust
 			]);
 
-			$meetingId  = (int) $request->input('meeting_id');
-			$meeting    = Meeting::select('id','title', 'capacity')->findOrFail($meetingId);
+			$meetingId = (int) $request->input('meeting_id');
+			$meeting   = Meeting::select('id','title','capacity')->findOrFail($meetingId);
 
-			$date       = \Carbon\Carbon::parse($request->input('date'))->toDateString();
-			$startTime  = $request->input('start_time'); // H:i
-			$endTime    = $request->input('end_time');   // H:i
+			$date  = Carbon::parse($request->input('date'))->toDateString();
+			$today = now()->toDateString();
 
-			// ---- Resolve intended attendees (internal + external) ----
+			if ($date < $today) {
+				DB::rollBack();
+				return response()->json([
+					'success' => false,
+					'message' => 'You cannot create meeting details for a past date.',
+				], 422);
+			}
+
+			$startTime = $request->input('start_time');
+			$endTime   = $request->input('end_time');
+
+			// 2) resolve attendees
 			$internalIds = collect($request->input('internal_users', []))
 				->filter()->map(fn($v) => (int)$v)->unique()->values();
 
 			$internalUsers = $internalIds->isNotEmpty()
-				? \App\Models\User::whereIn('id', $internalIds)->get(['id','email'])
+				? User::whereIn('id', $internalIds)->get(['id','email'])
 				: collect();
 
 			$externals = collect($request->input('external_users', []))
@@ -192,20 +211,17 @@ class MeetingDetailController extends Controller
 				->map(fn($x) => ['name' => $x['name'], 'email' => $x['email']])
 				->values();
 
-			// ---- CONFLICT CHECK (same meeting_id + same date + time overlap) ----
-			// Build identities to test: by user_id, or by (name+email)
+			// 3) conflict check (same as before)
 			$identities = collect();
-
 			if ($internalUsers->isNotEmpty()) {
 				foreach ($internalUsers as $u) {
 					$identities->push([
-						'user_id'    => (int)$u->id,
+						'user_id'    => (int) $u->id,
 						'user_name'  => null,
 						'user_email' => $u->email,
 					]);
 				}
 			}
-
 			if ($externals->isNotEmpty()) {
 				foreach ($externals as $e) {
 					$identities->push([
@@ -218,24 +234,26 @@ class MeetingDetailController extends Controller
 
 			$conflicts = [];
 			foreach ($identities->unique(function ($x) {
-				return $x['user_id'] ? 'id:'.$x['user_id']
-									: 'ne:'.mb_strtolower($x['user_name'] ?? '')
-										.'|'.mb_strtolower($x['user_email'] ?? '');
+				return $x['user_id']
+					? 'id:'.$x['user_id']
+					: 'ne:'.mb_strtolower($x['user_name'] ?? '').'|'.mb_strtolower($x['user_email'] ?? '');
 			}) as $who) {
 
 				$hasId = !empty($who['user_id']);
 				$hasNE = !empty($who['user_name']) && !empty($who['user_email']);
 				if (!$hasId && !$hasNE) continue;
 
-				$q = \App\Models\MeetingDetailspropagation::query()
+				$q = MeetingDetailspropagation::query()
 					->whereHas('meetingDetail', function ($md) use ($meetingId, $date, $startTime, $endTime) {
 						$md->where('meeting_id', $meetingId)
-						->whereDate('date', $date)
-						->where('start_time', '<', $endTime)  // strict overlap
-						->where('end_time',   '>', $startTime);
+							->whereDate('date', $date)
+							->where('start_time', '<', $endTime)
+							->where('end_time', '>', $startTime);
 					})
 					->where(function ($w) use ($who, $hasId, $hasNE) {
-						if ($hasId) $w->orWhere('user_id', (int) $who['user_id']);
+						if ($hasId) {
+							$w->orWhere('user_id', (int) $who['user_id']);
+						}
 						if ($hasNE) {
 							$w->orWhere(function ($x) use ($who) {
 								$x->where('user_name', $who['user_name'])
@@ -247,8 +265,7 @@ class MeetingDetailController extends Controller
 				$hits = $q->with([
 						'meetingDetail:id,meeting_id,date,start_time,end_time',
 						'meetingDetail.meeting:id,title',
-					])
-					->get(['id','user_id','user_name','user_email','meeting_detail_id']);
+					])->get(['id','user_id','user_name','user_email','meeting_detail_id']);
 
 				if ($hits->isNotEmpty()) {
 					$conflicts[] = [
@@ -280,16 +297,17 @@ class MeetingDetailController extends Controller
 				], 422);
 			}
 
-			// ---- CREATE (atomic) ----
-			$detail = \App\Models\MeetingDetail::create([
+			// 4) create meeting detail with agenda
+			$detail = MeetingDetail::create([
 				'meeting_id' => $meetingId,
 				'title'      => $request->input('title'),
 				'date'       => $date,
 				'start_time' => $startTime,
 				'end_time'   => $endTime,
+				'agenda'     => $request->input('agenda'),
 			]);
 
-			// Internal → user_id + user_email; External → name + email)
+			// 5) create propagations
 			if ($internalUsers->isNotEmpty()) {
 				foreach ($internalUsers as $u) {
 					$detail->propagations()->create([
@@ -302,22 +320,20 @@ class MeetingDetailController extends Controller
 				}
 
 				try {
-                    // Option A: queueable send (recommended in prod)
-                    Notification::send($internalUsers, new MeetingSent($detail));
-
-                    Log::info('Meeting notifications queued for internal users', [
-                        'meeting_id' => $meeting->id,
-                        'count'     => $internalUsers->count(),
-                        'users'     => $internalUsers->pluck('email'),
-                    ]);
-                } catch (\Throwable $e) {
-                    Log::error('Error sending meeting notifications', [
-                        'meeting_id' => $detail->id,
-                        'error'     => $e->getMessage(),
-                    ]);
-                }
+					Notification::send($internalUsers, new MeetingSent($detail));
+					Log::info('Meeting notifications queued for internal users', [
+						'meeting_id' => $meeting->id,
+						'count'      => $internalUsers->count(),
+						'users'      => $internalUsers->pluck('email'),
+					]);
+				} catch (\Throwable $e) {
+					Log::error('Error sending meeting notifications', [
+						'meeting_id' => $detail->id,
+						'error'      => $e->getMessage(),
+					]);
+				}
 			}
-			// External → user_id = null
+
 			if ($externals->isNotEmpty()) {
 				foreach ($externals as $e) {
 					$detail->propagations()->create([
@@ -330,12 +346,32 @@ class MeetingDetailController extends Controller
 				}
 			}
 
+			// 6) attachments
+			if ($request->hasFile('attachments')) {
+				foreach ($request->file('attachments') as $file) {
+					$path = $file->store('meeting_attachments', 'public'); // storage/app/public/meeting_attachments
+					MeetingAttachment::create([
+						'meeting_detail_id' => $detail->id,
+						'file_name'         => $file->getClientOriginalName(),
+						'file_type'         => $file->getClientMimeType(),
+						'file_path'         => $path,
+						'uploaded_at'       => now(),
+					]);
+				}
+			}
+
 			DB::commit();
 
-			$detail->loadCount('propagations');
-			if (filter_var($request->query('include'), FILTER_VALIDATE_BOOLEAN) ||
-				str_contains((string)$request->query('include'), 'propagations')) {
+			// eager load counts/relations for resource
+			$detail->loadCount('propagations', 'meetingAttachments');
+			if (
+				filter_var($request->query('include'), FILTER_VALIDATE_BOOLEAN) ||
+				str_contains((string)$request->query('include'), 'propagations')
+			) {
 				$detail->load('propagations');
+			}
+			if (str_contains((string)$request->query('include'), 'attachments')) {
+				$detail->load('meetingAttachments');
 			}
 
 			dispatch(new SendMeetingEmailsJob($detail->id));
@@ -355,8 +391,8 @@ class MeetingDetailController extends Controller
 		} catch (\Throwable $e) {
 			DB::rollBack();
 			Log::error('Error creating meeting detail', [
-				'error' => $e->getMessage(),
-				'trace' => $e->getTraceAsString(),
+				'error'   => $e->getMessage(),
+				'trace'   => $e->getTraceAsString(),
 				'request' => $request->all()
 			]);
 			return response()->json([

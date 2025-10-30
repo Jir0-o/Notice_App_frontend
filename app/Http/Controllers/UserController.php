@@ -68,7 +68,8 @@ class UserController extends Controller
             'phone'          => 'nullable|string|max:20',
             'roles'          => 'sometimes|array',
             'roles.*'        => 'string|exists:roles,name',
-            'signature'      => 'nullable|file|mimes:png,jpg,jpeg,pdf|max:5120',
+            'signature'      => 'nullable|file|mimes:png,jpg,jpeg,pdf',
+            'profile_photo'  => 'nullable|file|mimes:png,jpg,jpeg',
         ]);
 
         if ($v->fails()) {
@@ -81,6 +82,7 @@ class UserController extends Controller
 
         try {
             $signaturePath = null;
+            $profilePhotoPath = null;
 
             if ($request->hasFile('signature')) {
                 $file = $request->file('signature');
@@ -94,9 +96,22 @@ class UserController extends Controller
                 $signaturePath = 'user_images/signature/'.$filename;
             }
 
+            if ($request->hasFile('profile_photo')) {
+                $file = $request->file('profile_photo');
+                $filename = time().'_'.preg_replace('/\s+/', '_', $file->getClientOriginalName());
+                $dest = public_path('user_images/profile_photos');
+                if (!file_exists($dest)) mkdir($dest, 0755, true);
+
+                $file->move($dest, $filename);
+
+                // relative path (publicly accessible)
+                $profilePhotoPath = 'user_images/profile_photos/'.$filename;
+            }
+
             $data = $v->validated();
             $data['password'] = bcrypt($data['password']);
             $data['signature_path'] = $signaturePath;
+            $data['profile_photo_path'] = $profilePhotoPath;
 
             $user = User::create($data);
 
@@ -154,7 +169,8 @@ class UserController extends Controller
             'phone'          => 'nullable|string|max:20',
             'roles'          => 'sometimes|array',
             'roles.*'        => 'string|exists:roles,name',
-            'signature'      => 'nullable|file|mimes:png,jpg,jpeg,pdf|max:5120',
+            'signature'      => 'nullable|file|mimes:png,jpg,jpeg,pdf',
+            'profile_photo'  => 'nullable|file|mimes:png,jpg,jpeg',
         ]);
 
         if ($v->fails()) {
@@ -191,6 +207,22 @@ class UserController extends Controller
                 $data['signature_path'] = 'user_images/signature/'.$filename;
             }
 
+            // handle new profile photo upload
+            if ($request->hasFile('profile_photo')) {
+                // remove old profile photo if exists
+                if ($user->profile_photo_path && file_exists(public_path($user->profile_photo_path))) {
+                    @unlink(public_path($user->profile_photo_path));
+                }
+
+                $file = $request->file('profile_photo');
+                $filename = time().'_'.preg_replace('/\s+/', '_', $file->getClientOriginalName());
+                $dest = public_path('user_images/profile_photos');
+                if (!file_exists($dest)) mkdir($dest, 0755, true);
+
+                $file->move($dest, $filename);
+                $data['profile_photo_path'] = 'user_images/profile_photos/'.$filename;
+            }
+
             $user->update($data);
 
             if (array_key_exists('roles', $data)) {
@@ -198,6 +230,7 @@ class UserController extends Controller
             }
 
             $user->signature_url = $user->signature_path ? url($user->signature_path) : null;
+            $user->profile_photo_url = $user->profile_photo_path ? url($user->profile_photo_path) : null;
 
             return response()->json([
                 'success' => true,
