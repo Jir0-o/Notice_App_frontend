@@ -49,7 +49,7 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>Memorial No</th>
+            <th>Memo No</th>
             <th>Date</th>
             <th>Subject</th>
             <th>Status</th>
@@ -83,7 +83,7 @@
           </div>
           <div class="row g-2 mb-3">
             <div class="col-md-4">
-              <label class="form-label">Memorial No</label>
+              <label class="form-label">Memo No</label>
               <input name="memorial_no" id="memorial_no" class="form-control" required />
             </div>
             <div class="col-md-4">
@@ -116,6 +116,15 @@
 
             <div class="col-md-4">
               <label class="form-label">Internal users (select -> click target below)</label>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <input type="checkbox" id="selectAllUsers" />
+                <label for="selectAllUsers" class="ms-1 small-muted">Select all users</label>
+              </div>
+              <div>
+                <button type="button" id="clearUserSelection" class="btn btn-sm btn-link small-muted">Clear</button>
+              </div>
+            </div>
               <div id="usersBox" class="side-box small-muted">Select departments to load users</div>
               <div class="mt-2">
                 <button type="button" id="btn-add-to-distributions" class="btn btn-sm btn-outline-primary me-2">Add selected → Distributions</button>
@@ -246,14 +255,15 @@
   // legacy arrays for compatibility / UI hints
   let finalSelectedUsers = [];
   let externalUsers = [];
-  let selectedUserIds = []; // legacy "already added" ids
+  let selectedUserIds = []; 
 
-  // TEMP selection (checkboxes on left panel) - IMPORTANT: only temporary until user clicks Add
   let tempSelectedIds = [];
 
   // editors
   let quill = null;
   let quillSignature = null;
+
+  let isBulkSelecting = false;
 
   // init editors
   try { if (document.querySelector('#quillEditor')) quill = new Quill('#quillEditor', { theme: 'snow' }); } catch(e){ console.warn('quill body init failed', e); quill = null; }
@@ -572,10 +582,8 @@
     const n = (notice && notice.data) ? notice.data : notice || null;
 
     if (n) {
-      // existing code that fills fields...
       $('#updateNoticeWarning').show();
     } else {
-      // existing create-mode code...
       $('#updateNoticeWarning').hide();
     }
 
@@ -751,8 +759,8 @@
   // add selected internal users to Distributions or Regards (use tempSelectedIds now)
   $('#btn-add-to-distributions').on('click', function(){
     if (!tempSelectedIds.length) { toastr.info('Select internal users first'); return; }
-    tempSelectedIds.forEach(function(id){
-      const uid = Number(id);
+    tempSelectedIds.forEach(function(idStr){
+      const uid = Number(idStr);
       if (!uid) return;
       if (!distributionsInternalIds.includes(uid)) distributionsInternalIds.push(uid);
       if (!selectedUserIds.includes(uid)) selectedUserIds.push(uid);
@@ -764,6 +772,7 @@
     // clear temp selection and uncheck
     tempSelectedIds = [];
     $('#usersBox input[type=checkbox]').prop('checked', false);
+    $('#selectAllUsers').prop('checked', false);
     renderUsersBox();
     renderSelectedTargetPreview();
     refreshSelectedPreview();
@@ -771,8 +780,8 @@
 
   $('#btn-add-to-regards').on('click', function(){
     if (!tempSelectedIds.length) { toastr.info('Select internal users first'); return; }
-    tempSelectedIds.forEach(function(id){
-      const uid = Number(id);
+    tempSelectedIds.forEach(function(idStr){
+      const uid = Number(idStr);
       if (!uid) return;
       if (!regardsInternalIds.includes(uid)) regardsInternalIds.push(uid);
       if (!selectedUserIds.includes(uid)) selectedUserIds.push(uid);
@@ -784,6 +793,7 @@
     // clear temp selection and uncheck
     tempSelectedIds = [];
     $('#usersBox input[type=checkbox]').prop('checked', false);
+    $('#selectAllUsers').prop('checked', false);
     renderUsersBox();
     renderSelectedTargetPreview();
     refreshSelectedPreview();
@@ -818,14 +828,16 @@
 
   // when user-checkbox toggled -> update ONLY tempSelectedIds
   $(document).on('change', '.user-checkbox', function(){
-    const id = $(this).data('id');
+    // read id reliably (use attr or value)
+    const raw = $(this).attr('data-id') || $(this).val();
+    const id = raw == null ? '' : String(raw);
     if (!id) return;
     const isChecked = $(this).is(':checked');
 
     if (isChecked) {
       if (!tempSelectedIds.includes(id)) tempSelectedIds.push(id);
     } else {
-      tempSelectedIds = tempSelectedIds.filter(x => String(x) !== String(id));
+      tempSelectedIds = tempSelectedIds.filter(x => String(x) !== id);
     }
 
     // update the lightweight preview/count (legacy)
@@ -857,17 +869,49 @@
       const isChecked = tempSelectedIds.some(x => String(x) === String(u.id));
       // but also visually mark if already added
       const alreadyAdded = distributionsInternalIds.some(x => String(x)===String(u.id)) || regardsInternalIds.some(x => String(x)===String(u.id));
-      const checkedAttr = isChecked ? 'checked' : '';
       const addedBadge = alreadyAdded ? ' <span class="badge bg-info ms-2" style="font-size:10px">added</span>' : '';
-      const $el = $(
-        '<div class="form-check">' +
-          '<input class="form-check-input user-checkbox" id="user-' + u.id + '" type="checkbox" data-id="' + u.id + '" ' + checkedAttr + '>' +
-          '<label class="form-check-label" for="user-' + u.id + '">' + escapeHtml(u.name || u.full_name || 'User') + ' <small class="text-muted">(' + escapeHtml(u.email||'') + ')</small>' + addedBadge + '</label>' +
-        '</div>'
-      );
-      $box.append($el);
+
+      // build element with proper attributes and value
+      const $input = $('<input>')
+        .addClass('form-check-input user-checkbox')
+        .attr({ id: 'user-' + u.id, type: 'checkbox', 'data-id': String(u.id), value: String(u.id) })
+        .prop('checked', !!isChecked);
+
+      const $label = $('<label>')
+        .addClass('form-check-label')
+        .attr('for', 'user-' + u.id)
+        .html(escapeHtml(u.name || u.full_name || 'User') + ' <small class="text-muted">(' + escapeHtml(u.email||'') + ')</small>' + addedBadge);
+
+      const $div = $('<div>').addClass('form-check').append($input).append($label);
+      $box.append($div);
     });
   }
+
+  // Select all / clear handlers
+  $(document).on('change', '#selectAllUsers', function(){
+    const checked = $(this).is(':checked');
+    // guard so individual handler knows it's a bulk operation
+    isBulkSelecting = true;
+
+    // toggle visual checkboxes and trigger change handler (it will respect our attr/val reading)
+    $('#usersBox .user-checkbox').each(function(){
+      $(this).prop('checked', checked).trigger('change');
+    });
+
+    isBulkSelecting = false;
+  });
+
+  // clear button: uncheck all and reset selectAll checkbox
+  $(document).on('click', '#clearUserSelection', function(e){
+    e.preventDefault();
+    isBulkSelecting = true;
+    $('#usersBox .user-checkbox').each(function(){
+      $(this).prop('checked', false).trigger('change');
+    });
+    $('#selectAllUsers').prop('checked', false);
+    isBulkSelecting = false;
+  });
+
   function refreshSelectedPreview(){
     // legacy preview (finalSelectedUsers + externalUsers) - only used for count
     const merged = finalSelectedUsers.concat(externalUsers);
@@ -1069,7 +1113,7 @@
         .fail(function(err){
           console.warn('Modal DELETE failed, trying PATCH fallback', err);
           $.ajax({ url: API_BASE + '/notice-templates/' + id, method: 'PATCH' })
-            .done(function(r){ t((r && r.message) || 'Deleted (fallback)', 'success'); const noticeModalEl = document.getElementById('noticeModal'); const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null; if(instance) instance.hide(); loadNotices(); })
+            .done(function(r){ t((r && r.message) || 'Deleted (fallback)', 'success'); const noticeModalEl = document.getElementById('noticeModal'); const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null; if (instance) instance.hide(); loadNotices(); })
             .fail(function(err2){
               console.error('Modal delete failed', err2);
               const serverMsg = (err2 && err2.responseJSON && err2.responseJSON.message) || err2.responseText || err2.statusText || 'Delete failed';
@@ -1112,6 +1156,4 @@
 
 })(jQuery);
 </script>
-
-
 @endsection
