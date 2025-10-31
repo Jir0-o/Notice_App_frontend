@@ -81,6 +81,7 @@ class NoticeTemplateController extends Controller
                 'subject'        => $validated['subject'],
                 'body'           => $validated['body'],
                 'signature_body' => $validated['signature_body'] ?? null,
+                'status'=> $validated['status'],
             ]);
 
             // build children

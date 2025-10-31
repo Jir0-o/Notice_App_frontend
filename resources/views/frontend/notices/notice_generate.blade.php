@@ -992,7 +992,7 @@
       formData.append(`regards[external_users][${idx}][designation]`, u.designation || '');
       formData.append(`regards[external_users][${idx}][note]`, u.note || '');
     });
-
+ 
     // method spoof on update
     if (id) formData.append('_method','PUT');
 
