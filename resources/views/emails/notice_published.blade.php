@@ -103,7 +103,6 @@
 
         <div class="footer">
             &copy; {{ date('Y') }} Notice App &mdash; Please do not reply to this email.<br>
-            <a href="{{ url('/') }}" class="btn">View Notices</a>
         </div>
     </div>
 </body>

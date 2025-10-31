@@ -24,6 +24,10 @@ class MeetingDetailStoreRequest extends FormRequest
             'propagations.*.is_read'            => ['nullable','boolean'],
             'propagations.*.user_id'            => ['nullable','integer'],
             'propagations.*.sent_at'            => ['nullable','date'],
+
+            // attachments
+            'attachments'                      => ['sometimes','array'],
+            'attachments.*'                    => ['file','max:10240'], // max 10 MB
         ];
     }
 }

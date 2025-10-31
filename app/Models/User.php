@@ -43,6 +43,7 @@ class User extends Authenticatable
         'designation_id',
         'department_id',
         'signature_path',
+        'profile_photo_path',
         'status',
     ];
 

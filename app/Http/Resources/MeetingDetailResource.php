@@ -12,24 +12,28 @@ class MeetingDetailResource extends JsonResource
         $includeArr = collect(explode(',', $includeRaw))
             ->map(fn ($s) => strtolower(trim($s)))->filter()->values();
 
-        $boolInclude = filter_var($includeRaw, FILTER_VALIDATE_BOOLEAN);
-        $includeProp = $this->relationLoaded('propagations')        // already eager loaded
-                      || $boolInclude                               // include=true/1
-                      || $includeArr->contains('propagations');     // explicit token
-        
-         // ✅ show meeting if relation loaded OR include=true OR include=meeting
+        $boolInclude   = filter_var($includeRaw, FILTER_VALIDATE_BOOLEAN);
+        $includeProp   = $this->relationLoaded('propagations')
+                        || $boolInclude
+                        || $includeArr->contains('propagations');
+
         $includeMeeting = $this->relationLoaded('meeting')
                         || $boolInclude
                         || $includeArr->contains('meeting');
 
+        $includeAttach  = $this->relationLoaded('meetingAttachments')
+                        || $boolInclude
+                        || $includeArr->contains('attachments');
+
         return [
-            'id'                 => $this->id,
-            'title'              => $this->title,
-            'date'               => $this->date?->toDateString(),
-            'start_time'         => $this->start_time?->format('H:i'),
-            'end_time'           => $this->end_time?->format('H:i'),
-            'meeting_id'         => $this->meeting_id,
-            // ✅ parent meeting summary
+            'id'         => $this->id,
+            'title'      => $this->title,
+            'agenda'     => $this->agenda,
+            'date'       => $this->date?->toDateString(),
+            'start_time' => $this->start_time?->format('H:i'),
+            'end_time'   => $this->end_time?->format('H:i'),
+            'meeting_id' => $this->meeting_id,
+
             'meeting'    => $this->when($includeMeeting, function () {
                 return [
                     'id'        => $this->meeting->id        ?? null,
@@ -38,11 +42,25 @@ class MeetingDetailResource extends JsonResource
                     'is_active' => isset($this->meeting) ? (bool) $this->meeting->is_active : null,
                 ];
             }),
+
             'propagations_count' => $this->whenCounted('propagations'),
             'propagations'       => $this->when(
                 $includeProp,
                 fn () => PropagationResource::collection($this->whenLoaded('propagations', $this->propagations))
             ),
+
+            'attachments_count'  => $this->whenCounted('meetingAttachments'),
+            'attachments'        => $this->when($includeAttach, function () {
+                return $this->meetingAttachments->map(function ($att) {
+                    return [
+                        'id'         => $att->id,
+                        'file_name'  => $att->file_name,
+                        'file_type'  => $att->file_type,
+                        'file_path'  => $att->file_path,        // front-end can make URL: Storage::url(...)
+                        'uploaded_at'=> $att->uploaded_at?->toDateTimeString(),
+                    ];
+                });
+            }),
         ];
     }
 }
