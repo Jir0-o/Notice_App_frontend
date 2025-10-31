@@ -70,7 +70,7 @@
 
     {{-- Notices --}}
     <div class="col-sm-6 col-md-3">
-      <a href="{{ route('notices.index') }}" class="text-decoration-none text-dark">
+      <a class="text-decoration-none text-dark">
         <div class="card border-0 shadow-sm h-100 hover-shadow">
           <div class="card-body text-center">
             <div class="d-flex align-items-center justify-content-center mx-auto mb-3 bg-light rounded-circle" style="width:70px;height:70px;">

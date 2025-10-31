@@ -275,16 +275,16 @@ class DepartmentController extends Controller
 
     public function departmentBasedUsers(Request $request, int $id): JsonResponse
     {
-        // time window to check
         $data = $request->validate([
-            'date'       => ['required','date'],
-            'start_time' => ['required','date_format:H:i'],
-            'end_time'   => ['required','date_format:H:i','after:start_time'],
+            'date'       => ['nullable','date'],
+            'start_time' => ['nullable','date_format:H:i'],
+            'end_time'   => ['nullable','date_format:H:i','after:start_time'],
         ]);
 
-        $date      = \Carbon\Carbon::parse($data['date'])->toDateString();
-        $startTime = $data['start_time'];
-        $endTime   = $data['end_time'];
+        // normalize
+        $date      = $data['date']       ?? null;
+        $startTime = $data['start_time'] ?? null;
+        $endTime   = $data['end_time']   ?? null;
 
         try {
             // 1. get dept
@@ -310,7 +310,29 @@ class DepartmentController extends Controller
                 ], 200);
             }
 
-            // 3. pull all busy records for these users in that window
+            // if no window given, return users without busy check
+            if (!$date || !$startTime || !$endTime) {
+                $payload = $users->map(function ($u) {
+                    return [
+                        'id'          => $u->id,
+                        'name'        => $u->name,
+                        'email'       => $u->email,
+                        'designation' => $u->designation?->name,
+                        'is_busy'     => false,
+                        'conflicts'   => [],
+                        'busy_msg'    => null,
+                    ];
+                })->values();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Department users fetched (no time window supplied).',
+                    'window'  => null,
+                    'data'    => $payload,
+                ], 200);
+            }
+
+            // 3. now we DO have a window, so check busy
             $userIds = $users->pluck('id')->values();
 
             $busy = MeetingDetailspropagation::query()
@@ -326,10 +348,8 @@ class DepartmentController extends Controller
                 ])
                 ->get(['id','user_id','meeting_detail_id']);
 
-            // group busy rows by user_id
             $busyByUser = $busy->groupBy('user_id');
 
-            // 4. map users -> add is_busy flag
             $payload = $users->map(function ($u) use ($busyByUser) {
                 $conflicts = $busyByUser->get($u->id, collect());
 
@@ -350,7 +370,6 @@ class DepartmentController extends Controller
                             'end_time'          => optional($c->meetingDetail->end_time)?->format('H:i'),
                         ];
                     })->values(),
-                    // simple msg for UI
                     'busy_msg'    => $conflicts->isNotEmpty()
                         ? 'This user is in another meeting in this time window.'
                         : null,
