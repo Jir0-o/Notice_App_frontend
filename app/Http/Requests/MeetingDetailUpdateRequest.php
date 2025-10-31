@@ -29,6 +29,10 @@ class MeetingDetailUpdateRequest extends FormRequest
 
             // When true: treat as full replacement (delete others not in payload)
             'propagations_sync'                   => ['sometimes','boolean'],
+
+            // attachments
+            'attachments'                        => ['sometimes','array'],
+            'attachments.*'                      => ['file','max:10240'], // max 10 MB
         ];
     }
 }

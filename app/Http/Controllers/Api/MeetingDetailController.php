@@ -347,18 +347,39 @@ class MeetingDetailController extends Controller
 			}
 
 			// 6) attachments
-			if ($request->hasFile('attachments')) {
-				foreach ($request->file('attachments') as $file) {
-					$path = $file->store('meeting_attachments', 'public'); // storage/app/public/meeting_attachments
-					MeetingAttachment::create([
+			// Handle attachments (as before)
+            $files = $request->file('attachments');
+            if ($request->hasFile('attachments')) {
+                if (!is_array($files)) {
+                    $files = [$files];
+                }
+                foreach ($files as $file) {
+                    $filename = uniqid() . '_' . $file->getClientOriginalName();
+                    $file->move(public_path('meeting_attachments'), $filename);
+                    $filePath = url('meeting_attachments/' . $filename);
+
+                    MeetingAttachment::create([
 						'meeting_detail_id' => $detail->id,
-						'file_name'         => $file->getClientOriginalName(),
-						'file_type'         => $file->getClientMimeType(),
-						'file_path'         => $path,
-						'uploaded_at'       => now(),
-					]);
-				}
-			}
+                        'file_name'   => $filename,
+                        'file_type'   => $file->getClientOriginalExtension(),
+                        'file_path'   => $filePath,
+                        'uploaded_at' => now(),
+                    ]);
+                }
+            }
+
+			// if ($request->hasFile('attachments')) {
+			// 	foreach ($request->file('attachments') as $file) {
+			// 		$path = $file->store('meeting_attachments', 'public'); // storage/app/public/meeting_attachments
+			// 		MeetingAttachment::create([
+			// 			'meeting_detail_id' => $detail->id,
+			// 			'file_name'         => $file->getClientOriginalName(),
+			// 			'file_type'         => $file->getClientMimeType(),
+			// 			'file_path'         => $path,
+			// 			'uploaded_at'       => now(),
+			// 		]);
+			// 	}
+			// }
 
 			DB::commit();
 
@@ -594,6 +615,35 @@ class MeetingDetailController extends Controller
 					$newPropagationIdsToEmail[] = $prop->id; // collect new IDs
 				}
 			}
+
+			// Handle attachments (replace if new ones uploaded)
+            if ($request->hasFile('attachments')) {
+                foreach ($detail->attachments as $attachment) {
+                    $filePath = public_path('meeting_attachments/' . $attachment->file_name);
+                    if (file_exists($filePath)) {
+                        @unlink($filePath);
+                    }
+                    $attachment->delete();
+                }
+
+                $files = $request->file('attachments');
+                if (!is_array($files)) {
+                    $files = [$files];
+                }
+                foreach ($files as $file) {
+                    $filename = uniqid() . '_' . $file->getClientOriginalName();
+                    $file->move(public_path('notices'), $filename);
+                    $filePath = url('meeting_attachments/' . $filename);
+
+                    $detail->attachments()->create([
+                        'file_name'   => $filename,
+                        'file_type'   => $file->getClientOriginalExtension(),
+                        'file_path'   => $filePath,
+                        'uploaded_at' => now(),
+                    ]);
+                }
+            }
+			
 
 			// If notice already published and new recipients were added, enqueue emails just for them
             if (!empty($newPropagationIdsToEmail)) {
