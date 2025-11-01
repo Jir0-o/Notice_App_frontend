@@ -193,4 +193,12 @@
     }
   })();
 </script>
+
+<script>
+console.log('PATH=', window.location.pathname);
+console.log('TOKEN=', !!localStorage.getItem('api_token'));
+fetch('/api/profile', {
+  headers: { 'Authorization': 'Bearer ' + localStorage.getItem('api_token') }
+}).then(r => r.json()).then(j => console.log('PROFILE=', j));
+</script>
 @endsection

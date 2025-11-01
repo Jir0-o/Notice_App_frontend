@@ -36,53 +36,120 @@
     @livewireScripts
     <!-- MDB -->
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/7.0.0/mdb.umd.min.js"></script>
-        <script>
-        (function () {
-          const token = localStorage.getItem('api_token');
+    <script>
+    (function () {
+      // --- CONFIG (server-aware) ---
+      const BASE = "{{ rtrim(config('app.url') ?: request()->getSchemeAndHttpHost(), '/') }}"; // e.g. https://notice.quaarks.com
+      const API_BASE = BASE + '/api';
+      const token = localStorage.getItem('api_token') || null;
 
-          // Pages that should be blocked if you're already logged in:
-          const loginLikePaths = ['/','/ext/login', '/login', '/register'];
+      // normalize path — remove trailing slash
+      function normPath(p) {
+        if (!p) return '/';
+        if (p.length > 1 && p.endsWith('/')) return p.slice(0, -1);
+        return p;
+      }
 
-          // Decide where to push the user when logged in
-          function goDashboardByRole(role){
-            if(role === 'Super Admin') return '/dashboard';
-            if(role === 'Admin')       return '/meetings';
-            return '/user/meetings';
-          }
+      const currentPath = normPath(window.location.pathname);
 
-          async function getRole(){
-            try{
-              const base = "{{ rtrim(config('app.url') ?: request()->getSchemeAndHttpHost(), '/') }}";
-              const res = await fetch(base + '/api/profile', {
-                headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' }
-              });
-              if(!res.ok) return null;
-              const json = await res.json();
-              return json?.data?.role || null;
-            }catch(e){ return null; }
-          }
+      // pages where logged-in user should NOT stay
+      const loginLikePaths = [
+        '/',             // base
+        '/login',
+        '/ext/login',
+        '/register'
+      ].map(normPath);
 
-          (async function main(){
-            const path = window.location.pathname;
+      // pages that MUST be logged in
+      const protectedPrefixes = [
+        '/dashboard',
+        '/meetings',
+        '/user/meetings',
+        '/view-notices',
+        '/rooms',
+        '/settings',
+        '/user-profile',
+        '/user-notices'
+      ];
 
-            // If NOT logged in and page requires login, bounce to login
-            const mustBeAuthed = [
-              '/user-profile','/user-notices','/user-notices/', '/user/meetings',
-              '/meetings','/view-notices','/rooms','/settings'
-            ];
-            if(!token && mustBeAuthed.some(p => path.startsWith(p))){
-              window.location.replace('/ext/login');
-              return;
+      function isProtected(path) {
+        path = normPath(path);
+        return protectedPrefixes.some(p => path === p || path.startsWith(p + '/'));
+      }
+
+      // map role -> url
+      function redirectByRole(role) {
+        // role coming from API may be: "Super Admin", "Admin", "Inspector", etc.
+        if (!role) return '/user/meetings';
+
+        const r = String(role).toLowerCase();
+        if (r.includes('super')) return '/dashboard';
+        if (r === 'admin')       return '/meetings';
+        return '/user/meetings';
+      }
+
+      async function fetchProfileRole(token) {
+        try {
+          const res = await fetch(API_BASE + '/profile', {
+            headers: {
+              'Authorization': 'Bearer ' + token,
+              'Accept': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest'
             }
+          });
+          if (!res.ok) return null;
+          const json = await res.json();
+          const data = json?.data || json;
 
-            // If logged in and on a login-like page, bounce to dashboard
-            if(token && loginLikePaths.includes(path)){
-              const role = await getRole();
-              window.location.replace(goDashboardByRole(role));
-            }
-          })();
-        })();
-        </script>
+          // try all possible shapes
+          if (data?.role) return data.role;
+          if (Array.isArray(data?.roles) && data.roles.length) {
+            return typeof data.roles[0] === 'string'
+              ? data.roles[0]
+              : (data.roles[0].name || null);
+          }
+          if (Array.isArray(data?.role_names) && data.role_names.length) {
+            return data.role_names[0];
+          }
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      (async function main() {
+        // 1) NOT LOGGED IN CASE
+        if (!token) {
+          // user is on a protected page → kick to login
+          if (isProtected(currentPath)) {
+            window.location.replace('/ext/login');
+          }
+          return;
+        }
+
+        // 2) LOGGED IN CASE → get role
+        const role = await fetchProfileRole(token);
+        const target = redirectByRole(role);
+
+        // 2a) if user is on login-like page, bounce them
+        if (loginLikePaths.includes(currentPath)) {
+          window.location.replace(target);
+          return;
+        }
+
+        // 2b) else: user is on some guest page but already logged in → optional:
+        // if they hit "/" (base) → also bounce
+        if (currentPath === '/') {
+          window.location.replace(target);
+          return;
+        }
+
+        // else: logged in, on a normal/protected page → let them stay
+      })();
+    })();
+    </script>
+
+
 </body>
 
 </html>

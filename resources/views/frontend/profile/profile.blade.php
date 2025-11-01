@@ -4,7 +4,6 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
 
 <style>
-  /* overall container to match screenshot feel */
   .profile-container { max-width: 1200px; margin: 1.5rem auto; }
   .panel { border: 1px solid #e6e6e6; border-radius: 8px; background: #ffffff; padding: 1.1rem; margin-bottom: 1rem; }
   .panel .panel-title { font-weight: 600; margin-bottom: .75rem; }
@@ -13,7 +12,6 @@
   .field-label { font-size:.9rem; font-weight:600; margin-bottom:.35rem; display:block; }
   .form-actions { display:flex; justify-content:flex-end; gap:.5rem; }
   .small-muted { font-size:.85rem; color:#6c757d; }
-  .table-info { margin:0; padding:0; }
   .profile-top { display:flex; gap:1rem; align-items:center; }
   .profile-top .meta { flex:1; }
   .profile-grid { display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem; }
@@ -21,6 +19,8 @@
     .profile-grid { grid-template-columns: 1fr; }
   }
   .error-text { color:#dc3545; font-size:.9rem; margin-top:.25rem; display:block; }
+  .sig-box { border:1px dashed #ccc; border-radius:4px; padding:.35rem .5rem; min-height:60px; display:inline-block; }
+  .sig-box img { max-height:56px; }
 </style>
 
 <div class="profile-container">
@@ -34,7 +34,14 @@
       <div class="meta">
         <h5 id="profileName" style="margin:0;">Loading...</h5>
         <div id="profileRole" class="small-muted">Role</div>
-      </div> 
+        <div class="small-muted mt-1">
+          Signature:
+          <span class="sig-box" id="signaturePreviewBox">
+            <span id="signatureEmptyText">No signature</span>
+            <img id="profileSignature" src="" alt="signature" style="display:none;">
+          </span>
+        </div>
+      </div>
       <div style="text-align:right;">
         <button id="btn-refresh-profile" class="btn btn-outline-secondary btn-sm">Refresh</button>
       </div>
@@ -68,7 +75,8 @@
   <div class="panel">
     <div class="panel-title">Update Profile</div>
 
-    <form id="profileForm" autocomplete="off" class="row g-3">
+    <!-- enctype added for clarity; AJAX uses FormData -->
+    <form id="profileForm" autocomplete="off" class="row g-3" enctype="multipart/form-data">
       <div class="col-12">
         <label class="field-label" for="username">Name</label>
         <input id="username" name="username" type="text" class="form-control" placeholder="User Name" />
@@ -79,6 +87,20 @@
         <label class="field-label" for="phonenumber">Phone number</label>
         <input id="phonenumber" name="phonenumber" type="text" class="form-control" placeholder="User Phone Number" />
         <span id="err-phone" class="error-text" style="display:none;"></span>
+      </div>
+
+      <!-- NEW: profile photo -->
+      <div class="col-12">
+        <label class="field-label" for="profile_photo">Profile Photo</label>
+        <input id="profile_photo" name="profile_photo" type="file" class="form-control" accept="image/*" />
+        <small class="small-muted">Allowed: png, jpg, jpeg.</small>
+      </div>
+
+      <!-- NEW: signature -->
+      <div class="col-12">
+        <label class="field-label" for="signature">Signature</label>
+        <input id="signature" name="signature" type="file" class="form-control" accept="image/*,.pdf" />
+        <small class="small-muted">Allowed: png, jpg, jpeg, pdf.</small>
       </div>
 
       <div class="col-12 form-actions">
@@ -131,7 +153,6 @@ $(function() {
   const API_BASE = "{{ rtrim(config('app.url') ?: request()->getSchemeAndHttpHost(), '/') }}";
   function getToken(){ return localStorage.getItem('api_token') || null; }
 
-  // Ajax setup
   $.ajaxSetup({
     headers: {
       'X-Requested-With': 'XMLHttpRequest',
@@ -143,7 +164,6 @@ $(function() {
     }
   });
 
-  // UI helpers
   function clearErrorsProfile(){
     $('#err-name').hide().text('');
     $('#err-phone').hide().text('');
@@ -162,6 +182,8 @@ $(function() {
     if(!token){
       $('#profileName').text('Guest');
       $('#profileAvatar').attr('src', '{{ asset('template/assets/img/avatars/1.png') }}');
+      $('#profileSignature').hide();
+      $('#signatureEmptyText').show();
       showToast('warning', 'No API token found. Please login to load profile.');
       return;
     }
@@ -178,12 +200,18 @@ $(function() {
       const phone = payload.phone || '';
       const role  = payload.role || (payload.role_names?.[0] ?? '');
 
-      // photo logic (same as signature logic)
+      // photo
       let photoUrl = '{{ asset('template/assets/img/avatars/1.png') }}';
       if (payload.profile_photo_url) {
         photoUrl = payload.profile_photo_url;
       } else if (payload.profile_photo_path) {
         photoUrl = API_BASE + '/' + payload.profile_photo_path.replace(/^\/+/, '');
+      }
+
+      // signature
+      let sigUrl = null;
+      if (payload.signature_path) {
+        sigUrl = API_BASE + '/' + payload.signature_path.replace(/^\/+/, '');
       }
 
       // set UI values
@@ -196,20 +224,31 @@ $(function() {
       $('#profilePhone').text(phone);
       $('#username').val(name);
       $('#phonenumber').val(phone);
+
+      if (sigUrl) {
+        $('#profileSignature').attr('src', sigUrl).show();
+        $('#signatureEmptyText').hide();
+      } else {
+        $('#profileSignature').hide();
+        $('#signatureEmptyText').show();
+      }
     }).fail(function(xhr){
       $('#profileAvatar').attr('src', '{{ asset('template/assets/img/avatars/1.png') }}');
+      $('#profileSignature').hide();
+      $('#signatureEmptyText').show();
       showToast('error', xhr.status === 401 ? 'Unauthorized. Please login.' : 'Failed to load profile.');
     });
   }
 
-
-  // Update profile
+  // Update profile (now multipart)
   $('#profileForm').on('submit', function(e){
     e.preventDefault();
     clearErrorsProfile();
 
     const name = $('#username').val() ? $('#username').val().toString().trim() : '';
     const phone = $('#phonenumber').val() ? $('#phonenumber').val().toString().trim() : '';
+    const filePhoto = $('#profile_photo')[0].files[0];
+    const fileSignature = $('#signature')[0].files[0];
 
     if(!name){
       $('#err-name').show().text('Name is required.');
@@ -222,16 +261,34 @@ $(function() {
 
     $('#btn-update-profile').prop('disabled', true).text('Updating...');
 
+    // Build FormData to match controller's expectation
+    const fd = new FormData();
+    fd.append('name', name);
+    fd.append('phone', phone);
+    // optional extra fields if backend wants them in future
+    // fd.append('designation_id', '');
+    // fd.append('department_id', '');
+    if (filePhoto) {
+      fd.append('profile_photo', filePhoto);
+    }
+    if (fileSignature) {
+      fd.append('signature', fileSignature);
+    }
+
     $.ajax({
       url: API_BASE + '/api/profile',
       method: 'POST',
-      contentType: 'application/json',
-      data: JSON.stringify({ name: name, phone: phone }),
-      dataType: 'json'
+      data: fd,
+      dataType: 'json',
+      processData: false,
+      contentType: false,
     }).done(function(res){
       showToast('success', res?.message || 'Profile updated successfully.');
       loadProfile();
       clearErrorsProfile();
+      // clear file inputs
+      $('#profile_photo').val('');
+      $('#signature').val('');
     }).fail(function(xhr){
       console.error('update profile error', xhr);
       const errData = xhr.responseJSON || {};

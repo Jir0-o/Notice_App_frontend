@@ -1,7 +1,6 @@
 @extends('layouts.master')
 
 @section('content')
-<!-- Page styles (force white table + black text) -->
 <style>
   #noticesTable,
   #noticesTable thead,
@@ -15,7 +14,6 @@
     font-weight: 600;
   }
   #noticesTable td { color: #000000 !important; }
-  /* tidy pagination */
   #paginationNav .pagination .page-item .page-link { cursor: pointer; }
 </style>
 
@@ -53,7 +51,7 @@
           <th>Title</th>
           <th>Status (Recipients)</th>
           <th style="width:180px">Updated</th>
-          <th style="width:200px">Actions</th>
+          <th style="width:230px">Actions</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -63,14 +61,16 @@
   <nav id="paginationNav" class="mt-3" aria-label="Notices pagination"></nav>
 </div>
 
-<!-- jQuery (CDN) -->
+<!-- jQuery -->
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <script>
 $(function(){
-  const API_BASE = '{{ url('/') }}'; // base url
+  const API_BASE = '{{ url('/') }}';
   const token = localStorage.getItem('api_token') || null;
 
-  // ajax setup
   $.ajaxSetup({
     beforeSend: function(xhr){
       xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
@@ -78,13 +78,11 @@ $(function(){
     }
   });
 
-  // state
   let currentPage = 1;
   let perPage = Number($('#perPage').val() || 10);
 
-  // helper
   function escapeHtml(s){
-    return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&gt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   }
 
   function showLoading(){
@@ -97,7 +95,6 @@ $(function(){
     $('#paginationNav').empty();
   }
 
-  // render table rows
   function renderTable(items, startIndex){
     const $tbody = $('#noticesTable tbody').empty();
     if(!Array.isArray(items) || items.length === 0){
@@ -112,10 +109,12 @@ $(function(){
       const statusClass = it.status === 'published' ? 'text-success' : 'text-danger';
       const statusHtml = `<span class="${statusClass}">${escapeHtml(it.status ?? '')}</span>`;
 
-      const actions = [
-        `<a class="btn btn-sm btn-outline-primary me-1" href="/notices/${it.id}">View</a>`,
-        it.status !== 'published' ? `<a class="btn btn-sm btn-outline-secondary" href="/notices/${it.id}/edit">Edit</a>` : ''
-      ].join('');
+      let actions = '';
+      actions += `<a class="btn btn-sm btn-outline-primary me-1" href="/notices/${it.id}">View</a>`;
+      if (it.status !== 'published') {
+        actions += `<a class="btn btn-sm btn-outline-secondary me-1" href="/notices/${it.id}/edit">Edit</a>`;
+      }
+      actions += `<button type="button" class="btn btn-sm btn-outline-danger btn-delete-notice" data-id="${it.id}" data-title="${escapeHtml(it.title)}">Delete</button>`;
 
       const tr = `<tr>
         <td>${sl}</td>
@@ -129,7 +128,6 @@ $(function(){
     });
   }
 
-  // render pagination (expects paginator meta object)
   function renderPagination(meta){
     if(!meta) { $('#paginationNav').empty(); return; }
 
@@ -155,7 +153,6 @@ $(function(){
     $('#paginationNav').html(html);
   }
 
-  // load notices (robust to API shape)
   function loadNotices(page = 1){
     currentPage = page;
     perPage = Number($('#perPage').val() || 10);
@@ -168,9 +165,6 @@ $(function(){
       method: 'GET',
       data: { page: currentPage, per_page: perPage, status: status }
     }).done(function(resp){
-      // attempt to locate paginator data across common shapes
-      // preferred shape: resp.data (paginator) with resp.data.data array + from,last_page,current_page
-      // fallback: resp (paginator) with resp.data array
       let paginator = null;
       let items = [];
 
@@ -179,7 +173,6 @@ $(function(){
         return;
       }
 
-      // Case 1: resp.data is paginator object { data: [...], from:..., last_page:..., current_page:... }
       if(resp.data && resp.data.data && Array.isArray(resp.data.data)) {
         paginator = Object.assign({}, resp.data, {
           data: resp.data.data,
@@ -188,24 +181,13 @@ $(function(){
           current_page: resp.data.current_page
         });
         items = resp.data.data;
-      }
-      // Case 2: resp.data is array (API returned array directly)
-      else if(resp.data && Array.isArray(resp.data)) {
+      } else if(resp.data && Array.isArray(resp.data)) {
         items = resp.data;
         paginator = { data: items, from: resp.from ?? ((currentPage-1) * perPage + 1), last_page: resp.last_page ?? 1, current_page: resp.current_page ?? currentPage };
-      }
-      // Case 3: resp itself is paginator { data: [...], from:..., last_page:... }
-      else if(Array.isArray(resp.data) && resp.data.length !== undefined) {
-        items = resp.data;
-        paginator = { data: items, from: resp.from ?? ((currentPage-1) * perPage + 1), last_page: resp.last_page ?? 1, current_page: resp.current_page ?? currentPage };
-      }
-      // Case 4: resp is paginator-like with data property being the array
-      else if(Array.isArray(resp) && resp.length !== undefined) {
+      } else if(Array.isArray(resp) && resp.length !== undefined) {
         items = resp;
         paginator = { data: items, from: ((currentPage-1) * perPage + 1), last_page: 1, current_page: currentPage };
-      }
-      // Case 5: fallback try resp.data.data or resp.data
-      else {
+      } else {
         items = (resp.data && (resp.data.data || resp.data)) || [];
         if(!Array.isArray(items)) items = Array.isArray(resp) ? resp : [];
         paginator = {
@@ -216,7 +198,6 @@ $(function(){
         };
       }
 
-      // determine start index for serial column
       const startIndex = (paginator.from !== undefined && paginator.from !== null) ? paginator.from : ((paginator.current_page - 1) * perPage + 1);
 
       renderTable(items, startIndex);
@@ -229,12 +210,49 @@ $(function(){
     });
   }
 
-  // events
+  // SweetAlert delete
+  $(document).on('click', '.btn-delete-notice', function(){
+    const id = $(this).data('id');
+    const title = $(this).data('title') || 'this notice';
+
+    Swal.fire({
+      title: 'Delete?',
+      text: `You are deleting "${title}". This cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Yes, delete it'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        $.ajax({
+          url: `${API_BASE}/api/notices/${id}`,
+          method: 'DELETE',
+        }).done(function(res){
+          Swal.fire({
+            icon: 'success',
+            title: 'Deleted',
+            text: res?.message || 'Notice deleted successfully.',
+            timer: 1800,
+            showConfirmButton: false
+          });
+          loadNotices(currentPage);
+        }).fail(function(xhr){
+          const msg = xhr.responseJSON?.message || 'Failed to delete notice.';
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: msg
+          });
+        });
+      }
+    });
+  });
+
   $('#perPage').on('change', function(){ currentPage = 1; loadNotices(1); });
   $('#filterStatus').on('change', function(){ currentPage = 1; loadNotices(1); });
   $('#reloadBtn').on('click', function(){ loadNotices(currentPage); });
 
-  // pagination click
   $(document).on('click', '#paginationNav a.page-link', function(e){
     e.preventDefault();
     const p = Number($(this).data('page'));
@@ -242,7 +260,6 @@ $(function(){
     loadNotices(p);
   });
 
-  // initial
   loadNotices(1);
 });
 </script>

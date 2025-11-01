@@ -77,6 +77,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('notices/draft', [NoticeController::class, 'draftNotices'])->name('notices.draft');
         Route::get('/drafts-list', [NoticeController::class, 'draftNoticesList'])->name('notices.drafts.list');
         Route::post('/notices/{id}/publish', [NoticeController::class, 'publish'])->name('notices.publish');
+        Route::delete('/notices/{id}', [NoticeController::class,'destroy'])->name('notices.destroy');
 
         // for department based user
         Route::get('notices/department-users/{id}', [DepartmentController::class, 'departmentBasedUsers'])->name('notices.department.users');

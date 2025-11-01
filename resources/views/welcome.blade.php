@@ -32,4 +32,45 @@
             @endif
         </div>
     </body>
+
+    <script>
+(function () {
+  const BASE = "{{ rtrim(config('app.url') ?: request()->getSchemeAndHttpHost(), '/') }}";
+  const API_BASE = BASE + '/api';
+  const token = localStorage.getItem('api_token');
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+
+  async function getRole() {
+    try {
+      const r = await fetch(API_BASE + '/profile', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return j?.data?.role || j?.role || null;
+    } catch { return null; }
+  }
+
+  function redirectByRole(role) {
+    if (!role) return '/user/meetings';
+    const r = role.toLowerCase();
+    if (r.includes('super')) return '/dashboard';
+    if (r === 'admin') return '/meetings';
+    return '/user/meetings';
+  }
+
+  (async () => {
+    if (!token) {
+      window.location.replace('/ext/login');
+      return;
+    }
+    const role = await getRole();
+    if (path === '/' || path === '/login') {
+      window.location.replace(redirectByRole(role));
+    }
+  })();
+})();
+</script>
+
 </html>
+
