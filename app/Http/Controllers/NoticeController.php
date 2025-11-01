@@ -1234,26 +1234,48 @@ class NoticeController extends Controller
      * )
      */
     // Delete a notice
-    public function destroy(Notice $notice)
+    public function destroy($id)
     {
         try {
-            // Delete all attachment files from disk
+            $notice = Notice::with(['propagations', 'attachments'])->find($id);
+
+            if (! $notice) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Notice not found.',
+                ], 404);
+            }
+
+            DB::beginTransaction();
+
+            // 1) delete propagations
+            $notice->propagations()->delete();
+
+            // 2) delete attachment files + rows
             foreach ($notice->attachments as $attachment) {
+                // adjust this if you store full path
                 $filePath = public_path('notices/' . $attachment->file_name);
-                if (file_exists($filePath)) {
+                if (is_file($filePath)) {
                     @unlink($filePath);
                 }
             }
-            // Delete from DB
             $notice->attachments()->delete();
+
+            // 3) delete notice
             $notice->delete();
+
+            DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Notice deleted successfully.'
-            ], 200);
-        } catch (\Exception $e) {
-            Log::error('Error deleting notice: ' . $e->getMessage());
+                'message' => 'Notice deleted successfully.',
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Error deleting notice: '.$e->getMessage(), [
+                'notice_id' => $id,
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete notice.',

@@ -319,8 +319,42 @@ class UserController extends Controller
                 'phone'          => 'nullable|string|max:20',
                 'designation_id' => 'nullable|exists:designations,id',
                 'department_id'  => 'nullable|exists:departments,id',
+                'signature'      => 'nullable|file|mimes:png,jpg,jpeg,pdf',
+                'profile_photo'  => 'nullable|file|mimes:png,jpg,jpeg',
             ]);
             $data = $v->validated();
+
+            // handle new signature upload
+            if ($request->hasFile('signature')) {
+                // remove old signature if exists
+                if ($user->signature_path && file_exists(public_path($user->signature_path))) {
+                    @unlink(public_path($user->signature_path));
+                }
+
+                $file = $request->file('signature');
+                $filename = time().'_'.preg_replace('/\s+/', '_', $file->getClientOriginalName());
+                $dest = public_path('user_images/signature');
+                if (!file_exists($dest)) mkdir($dest, 0755, true);
+
+                $file->move($dest, $filename);
+                $data['signature_path'] = 'user_images/signature/'.$filename;
+            }
+
+            // handle new profile photo upload
+            if ($request->hasFile('profile_photo')) {
+                // remove old profile photo if exists
+                if ($user->profile_photo_path && file_exists(public_path($user->profile_photo_path))) {
+                    @unlink(public_path($user->profile_photo_path));
+                }
+
+                $file = $request->file('profile_photo');
+                $filename = time().'_'.preg_replace('/\s+/', '_', $file->getClientOriginalName());
+                $dest = public_path('user_images/profile_photos');
+                if (!file_exists($dest)) mkdir($dest, 0755, true);
+
+                $file->move($dest, $filename);
+                $data['profile_photo_path'] = 'user_images/profile_photos/'.$filename;
+            }
 
             // 3) Update user fields
             $user->update($data);
