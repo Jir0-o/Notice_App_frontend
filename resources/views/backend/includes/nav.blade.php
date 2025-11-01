@@ -37,7 +37,13 @@
       <li class="nav-item position-relative" id="nav-user">
         <a href="javascript:void(0);" id="userToggle" class="nav-link d-flex align-items-center" aria-expanded="false" role="button">
           <div class="avatar avatar-online me-2">
-            <img src="{{ asset('template/assets/img/avatars/1.png') }}" alt class="w-px-40 h-auto rounded-circle" />
+            {{-- initial fallback; will be replaced by JS --}}
+            <img 
+              id="navUserAvatar"
+              src="{{ asset('template/assets/img/avatars/1.png') }}" 
+              alt="User Avatar" 
+              class="w-px-40 h-auto rounded-circle border border-1" 
+            />
           </div>
           <div class="d-none d-md-block text-start">
             <div id="navUserName" class="fw-medium">Loading...</div>
@@ -51,7 +57,8 @@
           <div class="p-3 border-bottom">
             <div class="d-flex align-items-center">
               <div class="me-2">
-                <img src="{{ asset('template/assets/img/avatars/1.png') }}" class="w-px-40 h-auto rounded-circle" alt />
+                {{-- dropdown avatar, also updated by JS --}}
+                <img id="userMenuAvatar" src="{{ asset('template/assets/img/avatars/1.png') }}" class="w-px-40 h-auto rounded-circle" alt />
               </div>
               <div>
                 <div id="userMenuName" class="fw-semibold">Loading...</div>
@@ -112,20 +119,38 @@
         success: function(res){
           const data = (res && res.data) ? res.data : (res || {});
           const name = data.name ?? data.user?.name ?? 'User';
-          // roles may be string or array
+
+          // role
           let role = '';
           if (data.role) role = data.role;
-          else if (Array.isArray(data.roles) && data.roles.length) role = (typeof data.roles[0] === 'string') ? data.roles[0] : (data.roles[0].name || '');
-          else if (data.role_names && data.role_names.length) role = data.role_names[0];
+          else if (Array.isArray(data.roles) && data.roles.length) {
+            role = (typeof data.roles[0] === 'string') ? data.roles[0] : (data.roles[0].name || '');
+          } else if (data.role_names && data.role_names.length) {
+            role = data.role_names[0];
+          }
+
+          // avatar from API, same logic you used at table level
+          let photoUrl = null;
+          if (data.profile_photo_url) {
+            photoUrl = data.profile_photo_url;
+          } else if (data.profile_photo_path) {
+            // like your signature code:
+            photoUrl = API_BASE + '/' + data.profile_photo_path.replace(/^\/+/, '');
+          }
+
+          // set text
           $('#navUserName, #userMenuName').text(name);
           $('#navUserRole, #userMenuRole').text(role || '—');
-          // Optionally handle client-side menu visibility by role here
+
+          // set avatar in both places
+          if (photoUrl) {
+            $('#navUserAvatar').attr('src', photoUrl);
+            $('#userMenuAvatar').attr('src', photoUrl);
+          }
         },
         error: function(xhr){
-          // if 401/403, clear token
-          if (xhr.status === 401 || xhr.status === 403){
+          if (xhr.status === 401 || xhr.status === 403) {
             localStorage.removeItem(tokenKey);
-            console.warn('profile fetch failed, token removed');
           }
         }
       });

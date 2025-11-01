@@ -397,7 +397,7 @@
 
           const rolesArr = (user.roles || []).map(r => (r.name ?? r));
           $('#user_roles').val(rolesArr).trigger('change.select2');
-
+ 
           // signature preview in edit
           const sigUrl = user.signature_url
             ? user.signature_url

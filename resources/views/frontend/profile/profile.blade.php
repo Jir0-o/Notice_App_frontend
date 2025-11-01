@@ -161,47 +161,47 @@ $(function() {
     const token = getToken();
     if(!token){
       $('#profileName').text('Guest');
-      $('#profileNameSmall').text('-');
-      $('#profileRole').text('-');
-      $('#profileRoleSmall').text('-');
-      $('#profileEmail').text('-');
-      $('#profilePhone').text('-');
+      $('#profileAvatar').attr('src', '{{ asset('template/assets/img/avatars/1.png') }}');
       showToast('warning', 'No API token found. Please login to load profile.');
       return;
     }
 
     $('#profileName').text('Loading...');
-    $('#profileNameSmall').text('Loading...');
-
     $.ajax({
       url: API_BASE + '/api/profile',
       method: 'GET',
       dataType: 'json'
     }).done(function(res){
-      const payload = res && res.data ? res.data : (res || {});
-      $('#profileName').text(payload.name || '');
-      $('#profileNameSmall').text(payload.name || '');
-      $('#profileRole').text(payload.role || '');
-      $('#profileRoleSmall').text(payload.role || '');
-      $('#profileEmail').text(payload.email || '');
-      $('#profilePhone').text(payload.phone || '');
-      $('#username').val(payload.name || '');
-      $('#phonenumber').val(payload.phone || '');
-    }).fail(function(xhr){
-      console.error('loadProfile fail', xhr);
-      if(xhr && xhr.status === 401){
-        showToast('error', 'Unauthorized. Please login.');
-      } else {
-        showToast('error', 'Failed to load profile.');
+      const payload = res?.data ?? res ?? {};
+      const name  = payload.name || '';
+      const email = payload.email || '';
+      const phone = payload.phone || '';
+      const role  = payload.role || (payload.role_names?.[0] ?? '');
+
+      // photo logic (same as signature logic)
+      let photoUrl = '{{ asset('template/assets/img/avatars/1.png') }}';
+      if (payload.profile_photo_url) {
+        photoUrl = payload.profile_photo_url;
+      } else if (payload.profile_photo_path) {
+        photoUrl = API_BASE + '/' + payload.profile_photo_path.replace(/^\/+/, '');
       }
-      $('#profileName').text('—');
-      $('#profileEmail').text('—');
-      $('#profilePhone').text('—');
-      $('#profileRole').text('—');
-      $('#profileNameSmall').text('—');
-      $('#profileRoleSmall').text('—');
+
+      // set UI values
+      $('#profileAvatar').attr('src', photoUrl);
+      $('#profileName').text(name);
+      $('#profileRole').text(role);
+      $('#profileNameSmall').text(name);
+      $('#profileRoleSmall').text(role);
+      $('#profileEmail').text(email);
+      $('#profilePhone').text(phone);
+      $('#username').val(name);
+      $('#phonenumber').val(phone);
+    }).fail(function(xhr){
+      $('#profileAvatar').attr('src', '{{ asset('template/assets/img/avatars/1.png') }}');
+      showToast('error', xhr.status === 401 ? 'Unauthorized. Please login.' : 'Failed to load profile.');
     });
   }
+
 
   // Update profile
   $('#profileForm').on('submit', function(e){
