@@ -259,7 +259,7 @@ $(function(){
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || ''
     },
-    beforeSend: function(xhr){ if(token) xhr.setRequestHeader('Authorization', 'Bearer ' + token); }
+    beforeSend: function(xhr){ if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token); }
   });
 
   const meetingModalEl = document.getElementById('meetingModal');
@@ -268,30 +268,41 @@ $(function(){
   const eventDetailsModal = eventDetailsModalEl ? new bootstrap.Modal(eventDetailsModalEl) : null;
   const meetingUpdateNoteEl = document.getElementById('meetingUpdateNote');
 
-  let calendar = null, currentEvent = null;
+  let calendar = null;
+  let currentEvent = null;
   let departments = [];
-  let departmentUsers = {};       // {deptId: [users]}
-  let selectedUsers = [];         // ids for payload
-  let finalSelectedUsers = [];    // [{id,name,email}]
+  let departmentUsers = {};                   // {deptId: [users]}
+  let selectedUsers = [];                     // array of internal IDs to send
+  let finalSelectedUsers = [];                // [{id,name,email}]
   let externalUsers = [];
   let existingAtts = [];
   let agendaQuill = null;
   let userChangedEndTime = false;
+  let currentEditingMeetingId = null;         // meeting we are editing
+  let freedUsersFromCurrent = new Set();      // users removed in this edit so must not be treated as busy/same-meeting
 
-  function t(type,msg){ if(window.toastr) toastr[type](msg); else console[type==='error'?'error':'log'](msg); }
-  function safeData(res){ if(!res) return null; return (typeof res === 'object' && 'data' in res) ? res.data : res; }
-  function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function t(type, msg){
+    if (window.toastr) toastr[type](msg);
+    else console[type === 'error' ? 'error' : 'log'](msg);
+  }
 
-  function addMinutesToTime(hhmm, mins) {
+  function safeData(res){
+    if (!res) return null;
+    return (typeof res === 'object' && 'data' in res) ? res.data : res;
+  }
+
+  function escapeHtml(s){
+    return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  function addMinutesToTime(hhmm, mins){
     if (!hhmm) return '';
-    const parts = hhmm.split(':');
-    const h = Number(parts[0] || 0);
-    const m = Number(parts[1] || 0);
-    let total = h * 60 + m + mins;
+    const [h0, m0] = hhmm.split(':').map(Number);
+    let total = h0 * 60 + m0 + mins;
     if (total < 0) total = 0;
-    const hh = String(Math.floor(total / 60) % 24).padStart(2,'0');
-    const mm = String(total % 60).padStart(2,'0');
-    return `${hh}:${mm}`;
+    const h = String(Math.floor(total / 60) % 24).padStart(2, '0');
+    const m = String(total % 60).padStart(2, '0');
+    return `${h}:${m}`;
   }
 
   agendaQuill = new Quill('#agendaEditor', { theme: 'snow' });
@@ -300,10 +311,10 @@ $(function(){
   calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: 'dayGridMonth',
     height: 'auto',
-    dateClick: function(info){ openCreateModal(info.dateStr); },
-    eventClick: function(info){ currentEvent = info.event; showEventDetails(info.event); },
+    dateClick: info => openCreateModal(info.dateStr),
+    eventClick: info => { currentEvent = info.event; showEventDetails(info.event); },
     events: [],
-    eventDidMount: function(info){
+    eventDidMount: info => {
       info.el.style.backgroundColor = '#3788d8';
       info.el.style.borderColor = '#3788d8';
       info.el.style.color = '#fff';
@@ -322,17 +333,17 @@ $(function(){
         }
         if (!Array.isArray(payload)) payload = [];
         const clean = payload.filter(it => {
-          const d  = it?.date;
+          const d = it?.date;
           const st = it?.start_time;
           const et = it?.end_time;
           const okDate = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
-          const okTime = t => typeof t === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(t);
+          const okTime = s => typeof s === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(s);
           return okDate && okTime(st || '') && okTime(et || '');
         });
         return clean;
       })
       .catch(() => {
-        t('error','Could not fetch meetings');
+        t('error', 'Could not fetch meetings');
         return [];
       });
   }
@@ -342,8 +353,8 @@ $(function(){
     (events || []).forEach(m => {
       try {
         const date = m.date;
-        const st = (m.start_time || '').slice(0,8);
-        const et = (m.end_time   || '').slice(0,8);
+        const st = (m.start_time || '').slice(0, 8);
+        const et = (m.end_time   || '').slice(0, 8);
         const startStr = (date && st) ? `${date}T${st}` : null;
         const endStr   = (date && et) ? `${date}T${et}` : null;
         if (!startStr) return;
@@ -354,7 +365,7 @@ $(function(){
           end: endStr,
           extendedProps: m
         });
-      } catch (e) {}
+      } catch (_) {}
     });
   }
 
@@ -372,16 +383,13 @@ $(function(){
       });
   }
 
-  // draw dept checkboxes exactly like screenshot
   function renderDepartments(){
     const box = $('#departmentsBox').empty();
     $('#dept-all').prop('checked', false);
-
     if (!departments.length) {
       box.html('<small class="text-muted">No departments found</small>');
       return;
     }
-
     departments.forEach(d => {
       box.append(`
         <div class="form-check mb-1">
@@ -392,7 +400,6 @@ $(function(){
     });
   }
 
-  // fetch users for one department
   function fetchDepartmentUsers(depId){
     const date  = $('#date').val();
     const start = $('#start_time').val();
@@ -401,7 +408,12 @@ $(function(){
       t('error', 'Select date, start & end first.');
       return Promise.resolve([]);
     }
-    return $.get(`${API_BASE}/departments/${depId}/users-availability`, { date, start_time:start, end_time:end })
+    return $.get(`${API_BASE}/departments/${depId}/users-availability`, {
+      date,
+      start_time: start,
+      end_time: end,
+      meeting_id: currentEditingMeetingId || ''
+    })
       .then(res => {
         const data = safeData(res);
         const arr = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
@@ -409,7 +421,12 @@ $(function(){
         return arr;
       })
       .catch(() => {
-        return $.get(`${API_BASE}/notices/department-users/${depId}`, { date, start_time:start, end_time:end })
+        return $.get(`${API_BASE}/notices/department-users/${depId}`, {
+          date,
+          start_time: start,
+          end_time: end,
+          meeting_id: currentEditingMeetingId || ''
+        })
           .then(res => {
             const data = safeData(res);
             const arr = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
@@ -423,25 +440,18 @@ $(function(){
       });
   }
 
-  // fetch for all checked departments
   function loadUsersForCheckedDepartments(){
     const checkedIds = $('.dept-checkbox:checked').map(function(){ return $(this).val(); }).get();
-
     if (!checkedIds.length) {
       departmentUsers = {};
       renderUsersBox();
       $('#dept-all').prop('checked', false);
       return;
     }
-
-    // if all depts checked, sync master checkbox
     const allChecked = checkedIds.length === departments.length;
     $('#dept-all').prop('checked', allChecked);
-
     const jobs = checkedIds.map(id => fetchDepartmentUsers(id));
-    Promise.all(jobs).then(() => {
-      renderUsersBox();
-    });
+    Promise.all(jobs).then(() => renderUsersBox());
   }
 
   function renderUsersBox(){
@@ -456,48 +466,113 @@ $(function(){
       if (u && typeof u.id !== 'undefined') map.set(String(u.id), u);
     });
     const list = [...map.values()];
+
     list.forEach(u => {
       const uid = String(u.id);
       const isChecked = finalSelectedUsers.some(x => String(x.id) === uid);
-      const disabled = u.is_busy ? 'disabled' : '';
-      const busyBadge = u.is_busy ? `<span class="badge-busy ms-2" title="${escapeHtml(u.busy_msg || 'Busy')}">Busy</span>` : '';
-      const lblMuted = u.is_busy ? 'style="opacity:.6;"' : '';
-      const item = $(`
+
+      const isFreed = freedUsersFromCurrent.has(Number(u.id));
+      const apiSameMeeting =
+        currentEditingMeetingId &&
+        String(u.meeting_id || u.busy_meeting_id || u.current_meeting_id || '') === String(currentEditingMeetingId);
+      const isSameMeetingUser = apiSameMeeting && !isFreed;
+      const actuallyBusy = u.is_busy && !isSameMeetingUser && !isFreed;
+
+      const disabled = isSameMeetingUser ? 'disabled' : (actuallyBusy ? 'disabled' : '');
+      const busyBadge = actuallyBusy
+        ? `<span class="badge-busy ms-2" title="${escapeHtml(u.busy_msg || 'Busy')}">Busy</span>`
+        : '';
+      const lblMuted = (actuallyBusy || isSameMeetingUser) ? 'style="opacity:.6;"' : '';
+
+      box.append(`
         <div class="form-check">
-          <input class="form-check-input user-checkbox" type="checkbox" id="user-${uid}" data-id="${uid}" ${isChecked && !u.is_busy ? 'checked':''} ${disabled}>
+          <input class="form-check-input user-checkbox"
+                 type="checkbox"
+                 id="user-${uid}"
+                 data-id="${uid}"
+                 ${isChecked ? 'checked' : ''}
+                 ${disabled}>
           <label class="form-check-label" for="user-${uid}" ${lblMuted}>
-            ${escapeHtml(u.name || 'User')} <small class="text-muted">(${escapeHtml(u.email||'')})</small> ${busyBadge}
+            ${escapeHtml(u.name || 'User')}
+            <small class="text-muted">(${escapeHtml(u.email || '')})</small>
+            ${busyBadge}
+            ${isSameMeetingUser ? '<span class="badge bg-info ms-2">This meeting</span>' : ''}
           </label>
         </div>
       `);
-      box.append(item);
     });
   }
 
-  // select all (skip busy) for users
-  $('#selectAllNonBusy').on('change', function(){
+  // Select all (skip busy) for users — final version
+  $('#selectAllNonBusy').on('change', function () {
     const check = this.checked;
     const all = Object.values(departmentUsers).flat();
     const map = new Map();
-    all.forEach(u => { if(u && typeof u.id !== 'undefined') map.set(String(u.id), u); });
+    all.forEach(u => {
+      if (u && typeof u.id !== 'undefined') map.set(String(u.id), u);
+    });
     const list = [...map.values()];
 
     if (check) {
-      list.filter(u => !u.is_busy).forEach(u => {
+      list.forEach(u => {
+        const isFreed = freedUsersFromCurrent.has(Number(u.id));
+        const apiSameMeeting =
+          currentEditingMeetingId &&
+          String(u.meeting_id || u.busy_meeting_id || u.current_meeting_id || '') ===
+            String(currentEditingMeetingId);
+        const isSameMeetingUser = apiSameMeeting && !isFreed;
+
+        // Allow select if same meeting or freed or not busy
+        if (u.is_busy && !isSameMeetingUser && !isFreed) return;
+
         if (!finalSelectedUsers.some(x => Number(x.id) === Number(u.id))) {
-          finalSelectedUsers.push({ id: Number(u.id), name: u.name || 'User', email: u.email || '' });
+          finalSelectedUsers.push({
+            id: Number(u.id),
+            name: u.name || 'User',
+            email: u.email || ''
+          });
           selectedUsers.push(Number(u.id));
         }
       });
     } else {
+      // Unselect all
       list.forEach(u => {
         finalSelectedUsers = finalSelectedUsers.filter(x => Number(x.id) !== Number(u.id));
         selectedUsers = selectedUsers.filter(x => Number(x) !== Number(u.id));
       });
     }
+
     refreshSelectedPreview();
     renderUsersBox();
+
+    // After render, adjust UI state
+    $('.user-checkbox').each(function () {
+      const id = Number($(this).data('id'));
+      const user = list.find(u => Number(u.id) === id);
+      if (!user) return;
+
+      const isFreed = freedUsersFromCurrent.has(id);
+      const apiSameMeeting =
+        currentEditingMeetingId &&
+        String(user.meeting_id || user.busy_meeting_id || user.current_meeting_id || '') ===
+          String(currentEditingMeetingId);
+      const isSameMeetingUser = apiSameMeeting && !isFreed;
+      const isBusy = user.is_busy && !isSameMeetingUser && !isFreed;
+
+      // same-meeting users always selectable
+      if (isSameMeetingUser || !isBusy) {
+        $(this).prop('disabled', false);
+      }
+
+      if (check && (isSameMeetingUser || !isBusy)) {
+        $(this).prop('checked', true);
+      } else if (!check) {
+        $(this).prop('checked', false);
+      }
+    });
   });
+
+
 
   function refreshSelectedPreview(){
     const merged = [...finalSelectedUsers, ...externalUsers];
@@ -523,53 +598,61 @@ $(function(){
   }
 
   function addExternalUser(name, email){
-    if (!name || !email) { t('error','Name & email required'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { t('error','Invalid email'); return; }
-    if (externalUsers.some(u => u.email.toLowerCase() === email.toLowerCase())) { t('warning','External user already added'); return; }
+    if (!name || !email) { t('error', 'Name & email required'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { t('error', 'Invalid email'); return; }
+    if (externalUsers.some(u => u.email.toLowerCase() === email.toLowerCase())) { t('warning', 'External user already added'); return; }
     externalUsers.push({ name, email });
-    $('#ext_name').val(''); $('#ext_email').val('');
+    $('#ext_name').val('');
+    $('#ext_email').val('');
     refreshSelectedPreview();
   }
 
-  // attachments preview
   $('#attachments').on('change', function(){
     const files = Array.from(this.files || []);
     const pv = $('#attachmentsPreview').empty();
-    files.forEach((f,idx) => {
+    files.forEach((f, idx) => {
       pv.append(`<span class="file-chip" data-idx="${idx}"><span>${escapeHtml(f.name)}</span><button type="button" class="btn-file-remove">&times;</button></span>`);
     });
   });
+
   $('#attachmentsPreview').on('click', '.btn-file-remove', function(){
     $(this).closest('.file-chip').remove();
   });
 
-  // dept checkbox change
-  $(document).on('change', '.dept-checkbox', function(){
-    loadUsersForCheckedDepartments();
-  });
+  $(document).on('change', '.dept-checkbox', loadUsersForCheckedDepartments);
 
-  // master dept select-all
   $('#dept-all').on('change', function(){
     const checked = $(this).is(':checked');
     $('.dept-checkbox').prop('checked', checked);
-    if (checked) {
-      loadUsersForCheckedDepartments();
-    } else {
+    if (checked) loadUsersForCheckedDepartments();
+    else {
       departmentUsers = {};
       renderUsersBox();
     }
   });
 
-  // user checkbox
+  // user click
   $(document).on('change', '.user-checkbox', function(){
     const id = Number($(this).data('id'));
     let found = null;
     Object.values(departmentUsers).flat().forEach(u => { if (u && Number(u.id) === id) found = u; });
     if (!found) return;
-    if (found.is_busy) { $(this).prop('checked', false); return; }
+
+    const isAlreadySelected = finalSelectedUsers.some(x => Number(x.id) === id);
+    const isFreed = freedUsersFromCurrent.has(Number(found.id));
+    const apiSameMeeting =
+      currentEditingMeetingId &&
+      String(found.meeting_id || found.busy_meeting_id || found.current_meeting_id || '') === String(currentEditingMeetingId);
+    const isSameMeetingUser = apiSameMeeting && !isFreed;
+
+    if (found.is_busy && !isAlreadySelected && !isSameMeetingUser && !isFreed) {
+      $(this).prop('checked', false);
+      return;
+    }
+
     const idx = finalSelectedUsers.findIndex(u => Number(u.id) === id);
     if (idx >= 0) {
-      finalSelectedUsers.splice(idx,1);
+      finalSelectedUsers.splice(idx, 1);
       selectedUsers = selectedUsers.filter(x => Number(x) !== id);
     } else {
       finalSelectedUsers.push({ id, name: found.name || 'User', email: found.email || '' });
@@ -578,33 +661,42 @@ $(function(){
     refreshSelectedPreview();
   });
 
-  // remove chip
+  // remove from selected
   $(document).on('click', '.btn-remove', function(){
     const id = $(this).data('id');
     const email = $(this).data('email');
+
     if (typeof id !== 'undefined') {
       finalSelectedUsers = finalSelectedUsers.filter(u => Number(u.id) !== Number(id));
       selectedUsers = selectedUsers.filter(x => Number(x) !== Number(id));
+      if (currentEditingMeetingId) {
+        freedUsersFromCurrent.add(Number(id));
+      }
     } else if (email) {
       externalUsers = externalUsers.filter(u => u.email !== email);
     }
+
     refreshSelectedPreview();
     renderUsersBox();
   });
 
-  $('#btn-toggle-external').on('click', function(){ $('#externalForm').toggle(); });
-  $('#btn-add-external').on('click', function(){
+  $('#btn-toggle-external').on('click', () => $('#externalForm').toggle());
+  $('#btn-add-external').on('click', () => {
     addExternalUser(($('#ext_name').val() || '').trim(), ($('#ext_email').val() || '').trim());
   });
 
-  // rooms
   function fetchRooms(date, start, end){
     if (!date || !start || !end) {
       $('#roomInfo').text('Enter start & end to load rooms');
       return Promise.resolve([]);
     }
     $('#roomInfo').text('Loading rooms...');
-    return $.get(`${API_BASE}/v1/meetings/free`, { date, start_time:start, end_time:end })
+    return $.get(`${API_BASE}/v1/meetings/free`, {
+      date,
+      start_time: start,
+      end_time: end,
+      meeting_id: currentEditingMeetingId || ''
+    })
       .then(res => {
         const data = Array.isArray(safeData(res)) ? safeData(res) : (res.data || []);
         const sel = $('#room_id').empty().append('<option value="">Select room</option>');
@@ -625,9 +717,7 @@ $(function(){
       $('#end_time').val(addMinutesToTime(start, 60));
     }
     const end = $('#end_time').val();
-    if (date && start && end) {
-      fetchRooms(date, start, end);
-    }
+    if (date && start && end) fetchRooms(date, start, end);
   });
 
   $('#end_time').on('change', function(){
@@ -635,33 +725,28 @@ $(function(){
     const date  = $('#date').val();
     const start = $('#start_time').val();
     const end   = $('#end_time').val();
-    if (date && start && end) {
-      fetchRooms(date, start, end);
-    }
+    if (date && start && end) fetchRooms(date, start, end);
   });
 
   $('#date').on('change', function(){
     const date  = $('#date').val();
     const start = $('#start_time').val();
     const end   = $('#end_time').val();
-    if (date && start && end) {
-      fetchRooms(date, start, end);
-    }
+    if (date && start && end) fetchRooms(date, start, end);
   });
 
   function formatTime(d){
     if (!d) return '';
-    const date = (d instanceof Date) ? d : new Date(d);
-    const hh = String(date.getHours()).padStart(2,'0');
-    const mm = String(date.getMinutes()).padStart(2,'0');
-    return `${hh}:${mm}`;
+    const dt = (d instanceof Date) ? d : new Date(d);
+    return `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
   }
 
-  // create modal open
   function openCreateModal(dateStr){
     currentEvent = null;
     $('#meetingModalTitle').text('Create Meeting');
     if (meetingUpdateNoteEl) meetingUpdateNoteEl.style.display = 'none';
+    currentEditingMeetingId = null;
+    freedUsersFromCurrent = new Set();
     $('#meetingForm')[0].reset();
     agendaQuill?.setContents?.([]);
     existingAtts = [];
@@ -686,31 +771,26 @@ $(function(){
     }
 
     const now = new Date();
-    const hh  = String(now.getHours()).padStart(2, '0');
-    const mm  = String(now.getMinutes()).padStart(2, '0');
-    const currentTime = `${hh}:${mm}`;
+    const currentTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     $('#start_time').val(currentTime);
     $('#end_time').val(addMinutesToTime(currentTime, 60));
     userChangedEndTime = false;
 
     fetchRooms($('#date').val(), currentTime, addMinutesToTime(currentTime, 60));
-
     if (meetingModal) meetingModal.show();
     fetchDepartments();
     refreshSelectedPreview();
     renderUsersBox();
   }
 
-  // event details
   function showEventDetails(event){
     const ext = event.extendedProps || {};
     function fmt(dt){
       try {
         const d = (typeof dt === 'string') ? new Date(dt) : dt;
         return d ? d.toLocaleString() : '—';
-      } catch(e) { return dt || '—'; }
+      } catch (_) { return dt || '—'; }
     }
-
     $('#detailTitle').text(event.title || ext.title || 'Meeting details');
 
     const start = event.start || (ext.date && (ext.start_time ? `${ext.date}T${ext.start_time}` : ext.date));
@@ -773,7 +853,7 @@ $(function(){
     $('#detail_delete').off('click').on('click', function(){
       const id = event.id || ext.id;
       if (!id) return;
-      Swal.fire({title:'Delete meeting?', text:'This cannot be undone.', icon:'warning', showCancelButton:true})
+      Swal.fire({ title: 'Delete meeting?', text: 'This cannot be undone.', icon: 'warning', showCancelButton: true })
         .then(r => {
           if (!r.isConfirmed) return;
           $.ajax({ url: `${API_BASE}/meetings-details/${id}`, method: 'DELETE' })
@@ -782,7 +862,7 @@ $(function(){
               if (eventDetailsModal) eventDetailsModal.hide();
               fetchMeetings().then(loadEventsToCalendar);
             })
-            .fail(() => t('error','Delete failed'));
+            .fail(() => t('error', 'Delete failed'));
         });
     });
 
@@ -800,7 +880,7 @@ $(function(){
         `LOCATION:${roomTitle}`,
         'END:VEVENT','END:VCALENDAR'
       ].filter(Boolean).join('\r\n');
-      const blob = new Blob([lines], { type:'text/calendar;charset=utf-8' });
+      const blob = new Blob([lines], { type: 'text/calendar;charset=utf-8' });
       const url  = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -814,9 +894,10 @@ $(function(){
     if (eventDetailsModal) eventDetailsModal.show();
   }
 
-  // edit modal
   function openEditModalFromEvent(eventObj){
     const m = eventObj.extendedProps || {};
+    currentEditingMeetingId = eventObj.id ? Number(eventObj.id) : null;
+    freedUsersFromCurrent = new Set();
 
     $('#meetingModalTitle').text('Update Meeting');
     if (meetingUpdateNoteEl) meetingUpdateNoteEl.style.display = 'block';
@@ -874,8 +955,8 @@ $(function(){
         .then(() => {
           if (currentRoomId) {
             if ($('#room_id option[value="'+String(currentRoomId)+'"]').length === 0) {
-              const t = currentRoomTitle || ('Room #'+String(currentRoomId));
-              $('#room_id').append(`<option value="${String(currentRoomId)}">${escapeHtml(t)} (assigned)</option>`);
+              const tlabel = currentRoomTitle || ('Room #' + String(currentRoomId));
+              $('#room_id').append(`<option value="${String(currentRoomId)}">${escapeHtml(tlabel)} (assigned)</option>`);
             }
             $('#room_id').val(String(currentRoomId));
           } else {
@@ -891,7 +972,6 @@ $(function(){
     userChangedEndTime = true;
   }
 
-  // submit meeting
   $('#meetingForm').on('submit', function(e){
     e.preventDefault();
     $('#btn-save').prop('disabled', true);
@@ -903,8 +983,7 @@ $(function(){
     fd.append('end_time', $('#end_time').val() || '');
     const roomId = $('#room_id').val();
     if (roomId) fd.append('meeting_id', roomId);
-    const agendaHtml = agendaQuill?.root?.innerHTML || '';
-    fd.append('agenda', agendaHtml);
+    fd.append('agenda', agendaQuill?.root?.innerHTML || '');
     (selectedUsers || []).forEach((uid, i) => fd.append(`internal_users[${i}]`, uid));
     (externalUsers || []).forEach((u, i) => {
       fd.append(`external_users[${i}][name]`, u.name || '');
@@ -913,7 +992,7 @@ $(function(){
     const files = $('#attachments')[0]?.files || [];
     Array.from(files).forEach((f, i) => fd.append(`attachments[${i}]`, f));
     const url = recordId ? `${API_BASE}/meetings-details/${recordId}?include=true` : `${API_BASE}/meetings-details?include=true`;
-    if (recordId) fd.append('_method','PUT');
+    if (recordId) fd.append('_method', 'PUT');
 
     $.ajax({
       url,
@@ -952,26 +1031,25 @@ $(function(){
           t('success', 'Deleted');
           if (meetingModal) meetingModal.hide();
           fetchMeetings().then(loadEventsToCalendar);
-        }).fail(() => t('error', 'Delete failed'));
+        })
+        .fail(() => t('error', 'Delete failed'));
     });
   });
 
-  $('#btn-close-detail').on('click', function(){
-    currentEvent = null;
-  });
+  $('#btn-close-detail').on('click', () => { currentEvent = null; });
 
   function reloadAll(){
     Promise.all([fetchDepartments(), fetchMeetings()])
-      .then(([_, meetings]) => {
-        loadEventsToCalendar(meetings);
-      })
+      .then(([, meetings]) => loadEventsToCalendar(meetings))
       .catch(() => {});
   }
+
   $('#btn-refresh').on('click', reloadAll);
 
   // boot
   reloadAll();
 });
 </script>
+
 
 @endsection
