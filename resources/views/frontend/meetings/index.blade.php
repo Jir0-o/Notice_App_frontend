@@ -271,12 +271,19 @@ $(function(){
   let calendar = null, currentEvent = null;
   let departments = [];
   let departmentUsers = {};       // {deptId: [users]}
-  let selectedUsers = [];         // ids for payload
+  let selectedUsers = [];         // pure ids for payload
   let finalSelectedUsers = [];    // [{id,name,email}]
   let externalUsers = [];
   let existingAtts = [];
   let agendaQuill = null;
   let userChangedEndTime = false;
+
+  // IMPORTANT:
+  // - currentEditingMeetingId = the meeting we are editing right now
+  // - freedUsersFromCurrent   = users that were in this meeting but we removed them this time,
+  //                             so they must be selectable again
+  let currentEditingMeetingId = null;
+  let freedUsersFromCurrent = new Set();
 
   function t(type,msg){ if(window.toastr) toastr[type](msg); else console[type==='error'?'error':'log'](msg); }
   function safeData(res){ if(!res) return null; return (typeof res === 'object' && 'data' in res) ? res.data : res; }
@@ -372,7 +379,6 @@ $(function(){
       });
   }
 
-  // draw dept checkboxes exactly like screenshot
   function renderDepartments(){
     const box = $('#departmentsBox').empty();
     $('#dept-all').prop('checked', false);
@@ -392,7 +398,6 @@ $(function(){
     });
   }
 
-  // fetch users for one department
   function fetchDepartmentUsers(depId){
     const date  = $('#date').val();
     const start = $('#start_time').val();
@@ -401,7 +406,12 @@ $(function(){
       t('error', 'Select date, start & end first.');
       return Promise.resolve([]);
     }
-    return $.get(`${API_BASE}/departments/${depId}/users-availability`, { date, start_time:start, end_time:end })
+    return $.get(`${API_BASE}/departments/${depId}/users-availability`, {
+        date,
+        start_time: start,
+        end_time: end,
+        meeting_id: currentEditingMeetingId || ''
+      })
       .then(res => {
         const data = safeData(res);
         const arr = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
@@ -409,7 +419,12 @@ $(function(){
         return arr;
       })
       .catch(() => {
-        return $.get(`${API_BASE}/notices/department-users/${depId}`, { date, start_time:start, end_time:end })
+        return $.get(`${API_BASE}/notices/department-users/${depId}`, {
+            date,
+            start_time: start,
+            end_time: end,
+            meeting_id: currentEditingMeetingId || ''
+          })
           .then(res => {
             const data = safeData(res);
             const arr = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
@@ -423,7 +438,6 @@ $(function(){
       });
   }
 
-  // fetch for all checked departments
   function loadUsersForCheckedDepartments(){
     const checkedIds = $('.dept-checkbox:checked').map(function(){ return $(this).val(); }).get();
 
@@ -434,7 +448,6 @@ $(function(){
       return;
     }
 
-    // if all depts checked, sync master checkbox
     const allChecked = checkedIds.length === departments.length;
     $('#dept-all').prop('checked', allChecked);
 
@@ -444,6 +457,7 @@ $(function(){
     });
   }
 
+  // ------------ CORE FIX: renderUsersBox ------------
   function renderUsersBox(){
     const box = $('#usersBox').empty();
     const users = Object.values(departmentUsers).flat();
@@ -451,30 +465,63 @@ $(function(){
       box.html('<small class="text-muted">No users for selected departments</small>');
       return;
     }
+
     const map = new Map();
     users.forEach(u => {
       if (u && typeof u.id !== 'undefined') map.set(String(u.id), u);
     });
     const list = [...map.values()];
+
     list.forEach(u => {
       const uid = String(u.id);
-      const isChecked = finalSelectedUsers.some(x => String(x.id) === uid);
-      const disabled = u.is_busy ? 'disabled' : '';
-      const busyBadge = u.is_busy ? `<span class="badge-busy ms-2" title="${escapeHtml(u.busy_msg || 'Busy')}">Busy</span>` : '';
-      const lblMuted = u.is_busy ? 'style="opacity:.6;"' : '';
+
+      const isAlreadySelected = finalSelectedUsers.some(x => Number(x.id) === Number(u.id));
+
+      // user is from this meeting according to API
+      const apiSaysSameMeeting =
+        currentEditingMeetingId &&
+        String(u.meeting_id || u.busy_meeting_id || u.current_meeting_id || '') === String(currentEditingMeetingId);
+
+      // user we removed in this edit — we want him selectable
+      const isFreed = freedUsersFromCurrent.has(Number(u.id));
+
+      // final rule: if he is in this meeting OR already selected OR freed => force selectable
+      const isForceSelectable = isAlreadySelected || apiSaysSameMeeting || isFreed;
+
+      // only truly busy if API says busy AND not force-selectable
+      const actuallyBusy = (u.is_busy === true) && !isForceSelectable;
+
+      const disabled = actuallyBusy ? 'disabled' : '';
+      const isChecked = isAlreadySelected;
+
+      const badgeHtml = actuallyBusy
+        ? `<span class="badge-busy ms-2" title="${escapeHtml(u.busy_msg || 'Busy')}">Busy</span>`
+        : (apiSaysSameMeeting && !isFreed ? '<span class="badge bg-info ms-2">This meeting</span>' : '');
+
+      const lblMuted = actuallyBusy ? 'style="opacity:.6;"' : '';
+
       const item = $(`
         <div class="form-check">
-          <input class="form-check-input user-checkbox" type="checkbox" id="user-${uid}" data-id="${uid}" ${isChecked && !u.is_busy ? 'checked':''} ${disabled}>
+          <input class="form-check-input user-checkbox"
+                type="checkbox"
+                id="user-${uid}"
+                data-id="${uid}"
+                ${isChecked ? 'checked' : ''}
+                ${disabled}>
           <label class="form-check-label" for="user-${uid}" ${lblMuted}>
-            ${escapeHtml(u.name || 'User')} <small class="text-muted">(${escapeHtml(u.email||'')})</small> ${busyBadge}
+            ${escapeHtml(u.name || 'User')}
+            <small class="text-muted">(${escapeHtml(u.email || '')})</small>
+            ${badgeHtml}
           </label>
         </div>
       `);
+
       box.append(item);
     });
   }
+  // ---------------------------------------------------
 
-  // select all (skip busy) for users
+  // ------------ Select all (skip busy) ------------
   $('#selectAllNonBusy').on('change', function(){
     const check = this.checked;
     const all = Object.values(departmentUsers).flat();
@@ -483,21 +530,40 @@ $(function(){
     const list = [...map.values()];
 
     if (check) {
-      list.filter(u => !u.is_busy).forEach(u => {
-        if (!finalSelectedUsers.some(x => Number(x.id) === Number(u.id))) {
-          finalSelectedUsers.push({ id: Number(u.id), name: u.name || 'User', email: u.email || '' });
+      list.forEach(u => {
+        const isAlreadySelected = finalSelectedUsers.some(x => Number(x.id) === Number(u.id));
+        const apiSaysSameMeeting =
+          currentEditingMeetingId &&
+          String(u.meeting_id || u.busy_meeting_id || u.current_meeting_id || '') === String(currentEditingMeetingId);
+        const isFreed = freedUsersFromCurrent.has(Number(u.id));
+        const isForceSelectable = isAlreadySelected || apiSaysSameMeeting || isFreed;
+
+        // if busy but NOT force-selectable -> skip
+        if (u.is_busy && !isForceSelectable) return;
+
+        if (!isAlreadySelected) {
+          finalSelectedUsers.push({
+            id: Number(u.id),
+            name: u.name || 'User',
+            email: u.email || ''
+          });
+        }
+        if (!selectedUsers.includes(Number(u.id))) {
           selectedUsers.push(Number(u.id));
         }
       });
     } else {
+      // unselect all we loaded
       list.forEach(u => {
         finalSelectedUsers = finalSelectedUsers.filter(x => Number(x.id) !== Number(u.id));
         selectedUsers = selectedUsers.filter(x => Number(x) !== Number(u.id));
       });
     }
+
     refreshSelectedPreview();
     renderUsersBox();
   });
+  // ---------------------------------------------------
 
   function refreshSelectedPreview(){
     const merged = [...finalSelectedUsers, ...externalUsers];
@@ -531,7 +597,6 @@ $(function(){
     refreshSelectedPreview();
   }
 
-  // attachments preview
   $('#attachments').on('change', function(){
     const files = Array.from(this.files || []);
     const pv = $('#attachmentsPreview').empty();
@@ -543,12 +608,10 @@ $(function(){
     $(this).closest('.file-chip').remove();
   });
 
-  // dept checkbox change
   $(document).on('change', '.dept-checkbox', function(){
     loadUsersForCheckedDepartments();
   });
 
-  // master dept select-all
   $('#dept-all').on('change', function(){
     const checked = $(this).is(':checked');
     $('.dept-checkbox').prop('checked', checked);
@@ -560,13 +623,29 @@ $(function(){
     }
   });
 
-  // user checkbox
+  // ------------ user checkbox ------------
   $(document).on('change', '.user-checkbox', function(){
     const id = Number($(this).data('id'));
     let found = null;
     Object.values(departmentUsers).flat().forEach(u => { if (u && Number(u.id) === id) found = u; });
     if (!found) return;
-    if (found.is_busy) { $(this).prop('checked', false); return; }
+
+    const isAlreadySelected = finalSelectedUsers.some(x => Number(x.id) === id);
+
+    const apiSaysSameMeeting =
+      currentEditingMeetingId &&
+      String(found.meeting_id || found.busy_meeting_id || found.current_meeting_id || '') === String(currentEditingMeetingId);
+
+    const isFreed = freedUsersFromCurrent.has(id);
+
+    const isForceSelectable = isAlreadySelected || apiSaysSameMeeting || isFreed;
+
+    // block only truly busy
+    if (found.is_busy && !isForceSelectable) {
+      $(this).prop('checked', false);
+      return;
+    }
+
     const idx = finalSelectedUsers.findIndex(u => Number(u.id) === id);
     if (idx >= 0) {
       finalSelectedUsers.splice(idx,1);
@@ -577,34 +656,45 @@ $(function(){
     }
     refreshSelectedPreview();
   });
+  // --------------------------------------
 
-  // remove chip
+  // ------------ remove chip ------------
   $(document).on('click', '.btn-remove', function(){
     const id = $(this).data('id');
     const email = $(this).data('email');
     if (typeof id !== 'undefined') {
       finalSelectedUsers = finalSelectedUsers.filter(u => Number(u.id) !== Number(id));
       selectedUsers = selectedUsers.filter(x => Number(x) !== Number(id));
+
+      // very important: if we are editing a meeting, user is now "freed"
+      if (currentEditingMeetingId) {
+        freedUsersFromCurrent.add(Number(id));
+      }
     } else if (email) {
       externalUsers = externalUsers.filter(u => u.email !== email);
     }
     refreshSelectedPreview();
     renderUsersBox();
   });
+  // -------------------------------------
 
   $('#btn-toggle-external').on('click', function(){ $('#externalForm').toggle(); });
   $('#btn-add-external').on('click', function(){
     addExternalUser(($('#ext_name').val() || '').trim(), ($('#ext_email').val() || '').trim());
   });
 
-  // rooms
   function fetchRooms(date, start, end){
     if (!date || !start || !end) {
       $('#roomInfo').text('Enter start & end to load rooms');
       return Promise.resolve([]);
     }
     $('#roomInfo').text('Loading rooms...');
-    return $.get(`${API_BASE}/v1/meetings/free`, { date, start_time:start, end_time:end })
+    return $.get(`${API_BASE}/v1/meetings/free`, {
+        date,
+        start_time: start,
+        end_time: end,
+        meeting_id: currentEditingMeetingId || ''
+      })
       .then(res => {
         const data = Array.isArray(safeData(res)) ? safeData(res) : (res.data || []);
         const sel = $('#room_id').empty().append('<option value="">Select room</option>');
@@ -657,11 +747,12 @@ $(function(){
     return `${hh}:${mm}`;
   }
 
-  // create modal open
   function openCreateModal(dateStr){
     currentEvent = null;
     $('#meetingModalTitle').text('Create Meeting');
     if (meetingUpdateNoteEl) meetingUpdateNoteEl.style.display = 'none';
+    currentEditingMeetingId = null;
+    freedUsersFromCurrent = new Set();
     $('#meetingForm')[0].reset();
     agendaQuill?.setContents?.([]);
     existingAtts = [];
@@ -701,7 +792,6 @@ $(function(){
     renderUsersBox();
   }
 
-  // event details
   function showEventDetails(event){
     const ext = event.extendedProps || {};
     function fmt(dt){
@@ -814,9 +904,11 @@ $(function(){
     if (eventDetailsModal) eventDetailsModal.show();
   }
 
-  // edit modal
   function openEditModalFromEvent(eventObj){
     const m = eventObj.extendedProps || {};
+
+    currentEditingMeetingId = eventObj.id ? Number(eventObj.id) : null;
+    freedUsersFromCurrent = new Set(); // reset per edit
 
     $('#meetingModalTitle').text('Update Meeting');
     if (meetingUpdateNoteEl) meetingUpdateNoteEl.style.display = 'block';
@@ -891,7 +983,6 @@ $(function(){
     userChangedEndTime = true;
   }
 
-  // submit meeting
   $('#meetingForm').on('submit', function(e){
     e.preventDefault();
     $('#btn-save').prop('disabled', true);
@@ -973,5 +1064,6 @@ $(function(){
   reloadAll();
 });
 </script>
+
 
 @endsection
