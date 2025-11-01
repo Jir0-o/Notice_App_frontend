@@ -563,7 +563,7 @@ $(function(){
                 email: p.user?.email || p.user_email || ''
             }));
             externalUsers = externalB.map(p=>({
-                name: p.name || p.user?.name || '',
+                name: p.name || p.user?.name || '', 
                 email: p.user_email || p.email || ''
             }));
 
@@ -597,41 +597,111 @@ $(function(){
         const title       = $('#title').val().trim();
         const description = quill.root.innerHTML;
 
+        const hasFiles        = selectedFiles.length > 0;
+        const hasExternal     = externalUsers.length > 0;
+        const internalIds     = finalSelectedUsers.map(u => u.id);
+        const departmentsCopy = [...selectedDepartments];
+
+        $('#saveDraft').prop('disabled', true).text('Updating...');
+
+        // 1) CASE A: no files, no externals -> send JSON (can send [])
+        if (!hasFiles && !hasExternal) {
+            $.ajax({
+                url: `${API}/notices-update/${id}`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    title: title,
+                    description: description,
+                    internal_users: internalIds,
+                    external_users: [],          // <- this is what clears them
+                    departments: departmentsCopy
+                })
+            }).done(() => {
+                $('#alertBox').html('<div class="alert alert-success">Updated</div>');
+                setTimeout(() => window.location.href = '/view-notices', 1000);
+            }).fail(showNoticeErrors)
+            .always(() => $('#saveDraft').prop('disabled', false).text('Update (Save as Draft)'));
+
+            return; // done
+        }
+
+        // 2) CASE B: files but NO externals -> 2-step
+        if (hasFiles && !hasExternal) {
+            // step 1: clear externals via JSON
+            $.ajax({
+                url: `${API}/notices-update/${id}`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    title: title,
+                    description: description,
+                    internal_users: internalIds,
+                    external_users: [],          // <- clear here
+                    departments: departmentsCopy
+                })
+            }).done(() => {
+                // step 2: upload files with FormData
+                const fd = new FormData();
+                fd.append('title', title);
+                fd.append('description', description);
+                departmentsCopy.forEach((d,i)=> fd.append(`departments[${i}]`, d));
+                internalIds.forEach((uid,i)=> fd.append(`internal_users[${i}]`, uid));
+                // NOTE: we DO NOT send external_users here -> stays cleared
+                selectedFiles.forEach((f,i)=> fd.append(`attachments[${i}]`, f));
+
+                $.ajax({
+                    url: `${API}/notices-update/${id}`,
+                    method: 'POST',
+                    data: fd,
+                    processData: false,
+                    contentType: false,
+                }).done(() => {
+                    $('#alertBox').html('<div class="alert alert-success">Updated</div>');
+                    setTimeout(() => window.location.href = '/view-notices', 1000);
+                }).fail(showNoticeErrors)
+                .always(() => $('#saveDraft').prop('disabled', false).text('Update (Save as Draft)'));
+            }).fail(showNoticeErrors);
+
+            return; // done
+        }
+
+        // 3) CASE C: there ARE externals (normal flow, your old code)
         const fd = new FormData();
         fd.append('title', title);
         fd.append('description', description);
-
-        selectedDepartments.forEach((d,i)=> fd.append(`departments[${i}]`, d));
-        finalSelectedUsers.forEach((u,i)=> fd.append(`internal_users[${i}]`, u.id));
+        departmentsCopy.forEach((d,i)=> fd.append(`departments[${i}]`, d));
+        internalIds.forEach((uid,i)=> fd.append(`internal_users[${i}]`, uid));
         externalUsers.forEach((u,i)=>{
             fd.append(`external_users[${i}][name]`, u.name);
             fd.append(`external_users[${i}][email]`, u.email);
         });
         selectedFiles.forEach((f,i)=> fd.append(`attachments[${i}]`, f));
 
-        $('#saveDraft').prop('disabled', true).text('Updating...');
         $.ajax({
             url: `${API}/notices-update/${id}`,
             method: 'POST',
             data: fd,
             processData: false,
             contentType: false,
-        }).done(()=>{
+        }).done(() => {
             $('#alertBox').html('<div class="alert alert-success">Updated</div>');
-            setTimeout(()=> window.location.href='/view-notices', 1000);
-        }).fail(xhr=>{
-            if(xhr.status === 422){
-                const e = xhr.responseJSON.errors || {};
+            setTimeout(() => window.location.href = '/view-notices', 1000);
+        }).fail(showNoticeErrors)
+        .always(() => $('#saveDraft').prop('disabled', false).text('Update (Save as Draft)'));
+
+        function showNoticeErrors(xhr){
+            if (xhr.status === 422) {
+                const e = xhr.responseJSON?.errors || {};
                 $('#error_title').text(e.title ? e.title[0] : '');
                 $('#error_description').text(e.description ? e.description[0] : '');
-                if(e.attachments) $('#fileError').html(e.attachments.join('<br/>'));
+                if (e.attachments) $('#fileError').html(e.attachments.join('<br/>'));
             } else {
                 $('#alertBox').html('<div class="alert alert-danger">Failed to update notice</div>');
             }
-        }).always(()=>{
-            $('#saveDraft').prop('disabled', false).text('Update (Save as Draft)');
-        });
+        }
     });
+
 });
 </script>
 
