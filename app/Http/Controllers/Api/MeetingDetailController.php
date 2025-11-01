@@ -433,40 +433,43 @@ class MeetingDetailController extends Controller
 	{
 		DB::beginTransaction();
 		try {
-			// VALIDATION (mirror store; all are sometimes/nullable)
 			$request->validate([
-				'title'         => 'sometimes|string|max:255',
-				'date'          => 'sometimes|date',
-				'start_time'    => 'sometimes|date_format:H:i',
-				'end_time'      => 'sometimes|date_format:H:i',
-				'meeting_id'    => 'sometimes|integer|exists:meetings,id',
-				'internal_users'=> 'nullable|array',
-				'internal_users.*' => 'integer|exists:users,id',
-				'external_users'=> 'nullable|array',
+				'title'              => 'sometimes|string|max:255',
+				'date'               => 'sometimes|date',
+				'start_time'         => 'sometimes|date_format:H:i',
+				'end_time'           => 'sometimes|date_format:H:i',
+				'meeting_id'         => 'sometimes|integer|exists:meetings,id',
+				'internal_users'     => 'nullable|array',
+				'internal_users.*'   => 'integer|exists:users,id',
+				'external_users'     => 'nullable|array',
 				'external_users.*.email' => 'required_with:external_users|email',
 				'external_users.*.name'  => 'required_with:external_users|string|max:255',
+				'attachments'        => 'nullable|array',
+				'attachments.*'      => 'file|max:10240',
 			]);
 
-			$newPropagationIdsToEmail = [];
+			$detail = MeetingDetail::with(['propagations','meetingAttachments'])->findOrFail($id);
 
-			$detail = \App\Models\MeetingDetail::with('propagations')->findOrFail($id);
-
-			// Target meeting + effective window after update
 			$targetMeetingId = (int) $request->input('meeting_id', $detail->meeting_id);
 			$targetMeeting   = Meeting::select('id','title')->findOrFail($targetMeetingId);
 
-			$date      = $request->filled('date')       ? \Carbon\Carbon::parse($request->input('date'))->toDateString() : $detail->date?->toDateString();
+			$date      = $request->filled('date')       ? Carbon::parse($request->input('date'))->toDateString() : $detail->date?->toDateString();
 			$startTime = $request->filled('start_time') ? $request->input('start_time') : $detail->start_time?->format('H:i');
 			$endTime   = $request->filled('end_time')   ? $request->input('end_time')   : $detail->end_time?->format('H:i');
 
-			// ---- Build intended attendees (internal/external) for CONFLICT check ----
-			// Existing internal/external set from DB, then reconcile with payloads IF present.
+			// current attendees from DB
 			$existingInternalIds = $detail->propagations
-				->whereNotNull('user_id')->pluck('user_id')->map(fn($v)=>(int)$v)->values();
-			$existingExternals   = $detail->propagations
-				->whereNull('user_id')
-				->map(fn($p) => ['name' => $p->user_name, 'email' => $p->user_email])->values();
+				->whereNotNull('user_id')
+				->pluck('user_id')
+				->map(fn($v)=>(int)$v)
+				->values();
 
+			$existingExternals = $detail->propagations
+				->whereNull('user_id')
+				->map(fn($p) => ['name' => $p->user_name, 'email' => $p->user_email])
+				->values();
+
+			// incoming attendees (may fully replace)
 			$internalIds = $request->has('internal_users')
 				? collect($request->input('internal_users', []))->filter()->map(fn($v)=>(int)$v)->unique()->values()
 				: $existingInternalIds;
@@ -479,14 +482,13 @@ class MeetingDetailController extends Controller
 				: $existingExternals;
 
 			$internalUsers = $internalIds->isNotEmpty()
-				? \App\Models\User::whereIn('id', $internalIds)->get(['id','email'])
+				? User::whereIn('id', $internalIds)->get(['id','email'])
 				: collect();
 
-			// ---- CONFLICT CHECK (same meeting_id + same date + time overlap; exclude THIS detail) ----
+			// ===== conflict check: SAME meeting, SAME date/time, but EXCLUDE this detail
 			$identities = collect();
-
 			foreach ($internalUsers as $u) {
-				$identities->push(['user_id'=>(int)$u->id, 'user_name'=>null, 'user_email'=>$u->email]);
+				$identities->push(['user_id'=>$u->id, 'user_name'=>null, 'user_email'=>$u->email]);
 			}
 			foreach ($externalList as $e) {
 				$identities->push(['user_id'=>null, 'user_name'=>$e['name'], 'user_email'=>$e['email']]);
@@ -494,21 +496,21 @@ class MeetingDetailController extends Controller
 
 			$conflicts = [];
 			foreach ($identities->unique(function ($x) {
-				return $x['user_id'] ? 'id:'.$x['user_id']
-									: 'ne:'.mb_strtolower($x['user_name'] ?? '')
-										.'|'.mb_strtolower($x['user_email'] ?? '');
+				return $x['user_id']
+					? 'id:'.$x['user_id']
+					: 'ne:'.mb_strtolower($x['user_name'] ?? '').'|'.mb_strtolower($x['user_email'] ?? '');
 			}) as $who) {
 				$hasId = !empty($who['user_id']);
 				$hasNE = !empty($who['user_name']) && !empty($who['user_email']);
 				if (!$hasId && !$hasNE) continue;
 
-				$q = \App\Models\MeetingDetailspropagation::query()
+				$q = MeetingDetailspropagation::query()
 					->whereHas('meetingDetail', function ($md) use ($targetMeetingId, $detail, $date, $startTime, $endTime) {
 						$md->where('meeting_id', $targetMeetingId)
-						->where('id', '!=', $detail->id)
-						->whereDate('date', $date)
-						->where('start_time', '<', $endTime)
-						->where('end_time',   '>', $startTime);
+							->where('id', '!=', $detail->id) // <--- this is what makes "this meeting user" ok
+							->whereDate('date', $date)
+							->where('start_time', '<', $endTime)
+							->where('end_time',   '>', $startTime);
 					})
 					->where(function ($w) use ($who, $hasId, $hasNE) {
 						if ($hasId) $w->orWhere('user_id', (int) $who['user_id']);
@@ -523,8 +525,7 @@ class MeetingDetailController extends Controller
 				$hits = $q->with([
 						'meetingDetail:id,meeting_id,date,start_time,end_time',
 						'meetingDetail.meeting:id,title',
-					])
-					->get(['id','user_id','user_name','user_email','meeting_detail_id']);
+					])->get(['id','user_id','user_name','user_email','meeting_detail_id']);
 
 				if ($hits->isNotEmpty()) {
 					$conflicts[] = [
@@ -556,18 +557,21 @@ class MeetingDetailController extends Controller
 				], 422);
 			}
 
-			// ---- APPLY UPDATE (atomic) ----
+			// ===== apply main update
 			$detail->update([
 				'meeting_id' => $targetMeetingId,
 				'title'      => $request->input('title', $detail->title),
 				'date'       => $date,
 				'start_time' => $startTime,
 				'end_time'   => $endTime,
+				'agenda'     => $request->input('agenda', $detail->agenda), // allow agenda-only update
 			]);
 
-			// INTERNAL reconciliation: diff by user_id
+			$newPropagationIdsToEmail = [];
+
+			// ===== internal sync
 			if ($request->has('internal_users')) {
-				$existingInternalIds = $detail->propagations()
+				$existingInternalIdsArr = $detail->propagations()
 					->whereNotNull('user_id')
 					->pluck('user_id')
 					->map(fn($v)=>(int)$v)
@@ -575,16 +579,17 @@ class MeetingDetailController extends Controller
 
 				$requestedInternalIds = $internalIds->toArray();
 
-				$toAdd    = array_diff($requestedInternalIds, $existingInternalIds);
-				$toRemove = array_diff($existingInternalIds, $requestedInternalIds);
+				$toAdd    = array_diff($requestedInternalIds, $existingInternalIdsArr);
+				$toRemove = array_diff($existingInternalIdsArr, $requestedInternalIds);
 
 				if (!empty($toRemove)) {
-					\App\Models\MeetingDetailspropagation::where('meeting_detail_id', $detail->id)
+					MeetingDetailspropagation::where('meeting_detail_id', $detail->id)
 						->whereIn('user_id', $toRemove)
 						->delete();
 				}
+
 				if (!empty($toAdd)) {
-					$users = \App\Models\User::whereIn('id', $toAdd)->get(['id','email']);
+					$users = User::whereIn('id', $toAdd)->get(['id','email']);
 					foreach ($users as $u) {
 						$prop = $detail->propagations()->create([
 							'user_id'    => $u->id,
@@ -593,68 +598,71 @@ class MeetingDetailController extends Controller
 							'is_read'    => false,
 							'sent_at'    => now(),
 						]);
-						$newPropagationIdsToEmail[] = $prop->id; // collect new IDs
+						$newPropagationIdsToEmail[] = $prop->id;
 					}
 				}
 			}
 
-			// EXTERNAL replacement
-			if ($request->has('external_users')) {
-				\App\Models\MeetingDetailspropagation::where('meeting_detail_id', $detail->id)
+			
+			// Always sync externals — even if empty
+			if ($request->filled('external_users') || $request->has('external_users')) {
+				// remove all current external users
+				MeetingDetailspropagation::where('meeting_detail_id', $detail->id)
 					->whereNull('user_id')
 					->delete();
 
-				foreach ($externalList as $e) {
-					$prop = $detail->propagations()->create([
-						'user_id'    => null,
-						'user_name'  => $e['name'],
-						'user_email' => $e['email'],
-						'is_read'    => false,
-						'sent_at'    => now(),
-					]);
-					$newPropagationIdsToEmail[] = $prop->id; // collect new IDs
+				// re-add only if list not empty
+				if ($externalList->isNotEmpty()) {
+					foreach ($externalList as $e) {
+						$prop = $detail->propagations()->create([
+							'user_id'    => null,
+							'user_name'  => $e['name'],
+							'user_email' => $e['email'],
+							'is_read'    => false,
+							'sent_at'    => now(),
+						]);
+						$newPropagationIdsToEmail[] = $prop->id;
+					}
 				}
 			}
 
-			// Handle attachments (replace if new ones uploaded)
-            if ($request->hasFile('attachments')) {
-                foreach ($detail->attachments as $attachment) {
-                    $filePath = public_path('meeting_attachments/' . $attachment->file_name);
-                    if (file_exists($filePath)) {
-                        @unlink($filePath);
-                    }
-                    $attachment->delete();
-                }
+			// ===== attachments (fixed)
+			if ($request->hasFile('attachments')) {
+				// delete old
+				foreach ($detail->meetingAttachments as $attachment) {
+					$filePath = public_path('meeting_attachments/' . $attachment->file_name);
+					if (file_exists($filePath)) {
+						@unlink($filePath);
+					}
+					$attachment->delete();
+				}
 
-                $files = $request->file('attachments');
-                if (!is_array($files)) {
-                    $files = [$files];
-                }
-                foreach ($files as $file) {
-                    $filename = uniqid() . '_' . $file->getClientOriginalName();
-                    $file->move(public_path('notices'), $filename);
-                    $filePath = url('meeting_attachments/' . $filename);
+				$files = $request->file('attachments');
+				if (!is_array($files)) {
+					$files = [$files];
+				}
+				foreach ($files as $file) {
+					$filename = uniqid() . '_' . $file->getClientOriginalName();
+					$file->move(public_path('meeting_attachments'), $filename);
 
-                    $detail->attachments()->create([
-                        'file_name'   => $filename,
-                        'file_type'   => $file->getClientOriginalExtension(),
-                        'file_path'   => $filePath,
-                        'uploaded_at' => now(),
-                    ]);
-                }
-            }
-			
+					$detail->meetingAttachments()->create([
+						'file_name'   => $filename,
+						'file_type'   => $file->getClientOriginalExtension(),
+						'file_path'   => url('meeting_attachments/' . $filename),
+						'uploaded_at' => now(),
+					]);
+				}
+			}
 
-			// If notice already published and new recipients were added, enqueue emails just for them
-            if (!empty($newPropagationIdsToEmail)) {
-                dispatch(new SendMeetingEmailsJob($detail->id, $newPropagationIdsToEmail));
-            }
+			// send emails only for new people
+			if (!empty($newPropagationIdsToEmail)) {
+				dispatch(new SendMeetingEmailsJob($detail->id, $newPropagationIdsToEmail));
+			}
 
 			DB::commit();
 
-			$detail->loadCount('propagations');
-			if (filter_var($request->query('include'), FILTER_VALIDATE_BOOLEAN) ||
-				str_contains((string)$request->query('include'), 'propagations')) {
+			$detail->loadCount('propagations','meetingAttachments');
+			if ($request->boolean('include') || str_contains((string) $request->query('include'), 'propagations')) {
 				$detail->load('propagations');
 			}
 
@@ -674,8 +682,8 @@ class MeetingDetailController extends Controller
 		} catch (\Throwable $e) {
 			DB::rollBack();
 			Log::error('Error updating meeting detail', [
-				'error' => $e->getMessage(),
-				'trace' => $e->getTraceAsString(),
+				'error'   => $e->getMessage(),
+				'trace'   => $e->getTraceAsString(),
 				'request' => $request->all()
 			]);
 			return response()->json([
