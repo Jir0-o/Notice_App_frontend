@@ -12,7 +12,12 @@
   .meeting-badge { font-size: 12px; border-radius: 6px; padding: 2px 6px; text-transform: uppercase; }
   .meeting-label { font-weight: 600; color:#555; font-size: 14px; }
   .meeting-value { color:#000; font-weight: 500; }
-  
+
+  /* modal header color (optional) */
+.modal-header-brand {
+  background: linear-gradient(90deg,#0062ff,#0038ff);
+  color:#fff;
+}
 </style>
 
 <div class="card shadow-sm">
@@ -25,11 +30,11 @@
   </div>
 </div>
 
-<!-- Professional Meeting Details Modal -->
+<!-- Meeting Details Modal -->
 <div id="meetingDetailsModal" class="modal fade" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg modal-panel">
     <div class="modal-content border-0 shadow">
-      <div class="modal-header modal-header-brand">
+      <div class="modal-header bg-white border-bottom">
         <div>
           <h5 id="detailTitle" class="modal-title fw-bold mb-0">Meeting Details</h5>
           <small class="text-light-50">For your schedule</small>
@@ -39,6 +44,7 @@
 
       <div class="modal-body bg-light">
         <div class="row g-4">
+          <!-- LEFT: info + agenda + attachments -->
           <div class="col-md-7">
             <div class="p-3 bg-white rounded shadow-sm">
               <div class="d-flex justify-content-between align-items-start mb-3">
@@ -46,17 +52,38 @@
                 <span id="meeting_status" class="badge meeting-badge bg-secondary">Upcoming</span>
               </div>
 
-              <div class="mb-2"><span class="meeting-label">🕓 Start:</span> <span id="detail_start" class="meeting-value"></span></div>
-              <div class="mb-2"><span class="meeting-label">🕞 End:</span> <span id="detail_end" class="meeting-value"></span></div>
-              <div class="mb-3"><span class="meeting-label">🏢 Room:</span> <span id="detail_room" class="meeting-value"></span></div>
+              <div class="mb-2">
+                <span class="meeting-label">🕓 Start:</span>
+                <span id="detail_start" class="meeting-value"></span>
+              </div>
+              <div class="mb-2">
+                <span class="meeting-label">🕞 End:</span>
+                <span id="detail_end" class="meeting-value"></span>
+              </div>
+              <div class="mb-3">
+                <span class="meeting-label">🏢 Room:</span>
+                <span id="detail_room" class="meeting-value"></span>
+              </div>
 
-              {{-- <div class="border-top pt-2 mt-3">
-                <div class="meeting-label mb-1">📝 Description</div>
-                <div id="detail_description" class="text-muted small" style="max-height:150px; overflow:auto;">No description</div>
-              </div> --}}
+              {{-- NEW: Agenda --}}
+              <div class="border-top pt-2 mt-3">
+                <div class="meeting-label mb-1">📝 Agenda</div>
+                <div id="detail_agenda" class="text-muted small" style="max-height:150px; overflow:auto;">
+                  No agenda provided.
+                </div>
+              </div>
+
+              {{-- NEW: Attachments --}}
+              <div class="border-top pt-2 mt-3">
+                <div class="meeting-label mb-1">📎 Attachments</div>
+                <div id="detail_attachments" class="text-muted small">
+                  No attachments.
+                </div>
+              </div>
             </div>
           </div>
 
+          <!-- RIGHT: participants -->
           <div class="col-md-5">
             <div class="p-3 bg-white rounded shadow-sm">
               <div class="d-flex justify-content-between align-items-center mb-2">
@@ -84,6 +111,8 @@
 <!-- Toastr & SweetAlert -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+<!-- Bootstrap JS (needed for modal) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
 $(function(){
@@ -93,14 +122,13 @@ $(function(){
   const API_BASE = "{{ rtrim(config('app.url') ?: request()->getSchemeAndHttpHost(), '/') }}";
   const token = localStorage.getItem('api_token') || null;
 
-  // Setup AJAX headers
   $.ajaxSetup({
     headers: {
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || ''
     },
     beforeSend: function(xhr){
-      if(token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+      if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
     }
   });
 
@@ -135,11 +163,14 @@ $(function(){
   function formatDateTime(d){ return d ? new Date(d).toLocaleString() : '—'; }
 
   // -----------------------
-  // Fetch Meetings (user-based)
+  // Fetch Meetings (user)
   // -----------------------
   async function fetchMeetingsForUser(){
-    if(!token){ showToast('warning', 'Please login first.'); return []; }
-    try{
+    if(!token){
+      showToast('warning', 'Please login first.');
+      return [];
+    }
+    try {
       const res = await $.ajax({
         url: `${API_BASE}/api/meeting-details/by-user`,
         method: 'GET',
@@ -147,9 +178,9 @@ $(function(){
         data: { include: true }
       });
       return Array.isArray(safeData(res)) ? safeData(res) : [];
-    }catch(err){
+    } catch (err) {
       console.error('fetchMeetingsForUser', err);
-      if(err.status === 401) showToast('error', 'Unauthorized. Please login again.');
+      if (err.status === 401) showToast('error', 'Unauthorized. Please login again.');
       else showToast('error', 'Failed to load meetings.');
       return [];
     }
@@ -175,46 +206,80 @@ $(function(){
     loadMeetingsToCalendar(meetings);
   }
 
-  // Initial load
+  // initial
   reloadMeetings();
 
-  // Refresh button
+  // refresh btn
   $('#btn-refresh').on('click', reloadMeetings);
 
   // -----------------------
-  // Professional Details Modal Rendering
+  // Meeting details modal
   // -----------------------
   function showMeetingDetails(event){
     const m = event.extendedProps || {};
 
-    // Title & time
+    // title & time
     $('#detailTitle').text('Meeting Details');
     $('#detail_title').text(event.title || m.title || 'Untitled Meeting');
     $('#detail_start').text(formatDateTime(event.start || (m.date + ' ' + m.start_time)));
     $('#detail_end').text(formatDateTime(event.end || (m.date + ' ' + m.end_time)));
-    $('#detail_room').text(m.meeting?.title || m.meetingInfo?.title || m.room_title || 'N/A');
+    $('#detail_room').text(
+      m.meeting?.title ||
+      m.meetingInfo?.title ||
+      m.room_title ||
+      'N/A'
+    );
 
-    // Description
-    $('#detail_description').html(m.description || m.meeting?.description || '<small class="text-muted">No description available.</small>');
-
-    // Status badge
+    // status
     const now = new Date();
     const start = event.start ? new Date(event.start) : null;
-    const badge = $('#meeting_status');
-    if(start && start > now) badge.removeClass().addClass('badge meeting-badge bg-info').text('Upcoming');
-    else if(start && start < now) badge.removeClass().addClass('badge meeting-badge bg-success').text('Completed');
-    else badge.removeClass().addClass('badge meeting-badge bg-secondary').text('Ongoing');
+    const $badge = $('#meeting_status');
+    if (start && start > now) {
+      $badge.removeClass().addClass('badge meeting-badge bg-info').text('Upcoming');
+    } else if (start && start < now) {
+      $badge.removeClass().addClass('badge meeting-badge bg-success').text('Completed');
+    } else {
+      $badge.removeClass().addClass('badge meeting-badge bg-secondary').text('Ongoing');
+    }
 
-    // Participants
+    // -------- AGENDA ----------
+    const agendaHtml =
+      m.agenda ||
+      m.meeting?.agenda ||
+      m.meeting?.description || // fallback if API used description
+      '<small class="text-muted">No agenda provided.</small>';
+    $('#detail_agenda').html(agendaHtml);
+
+    // -------- ATTACHMENTS ----------
+    // We check both meeting_attachments and attachments
+    const atts = Array.isArray(m.meeting_attachments)
+      ? m.meeting_attachments
+      : (Array.isArray(m.attachments) ? m.attachments : []);
+    const $attBox = $('#detail_attachments').empty();
+    if (atts.length) {
+      atts.forEach(a => {
+        const url = a.file_path || a.file_url || a.url || '#';
+        const name = a.file_name || a.file_name_original || a.name || 'attachment';
+        $attBox.append(
+          `<div><a href="${url}" target="_blank" rel="noopener">${escapeHtml(name)}</a></div>`
+        );
+      });
+    } else {
+      $attBox.html('<small class="text-muted">No attachments.</small>');
+    }
+
+    // -------- PARTICIPANTS ----------
     const props = m.propagations || m.propagations_data || [];
-    const list = $('#participants_list').empty();
-    if(Array.isArray(props) && props.length){
+    const $list = $('#participants_list').empty();
+    if (Array.isArray(props) && props.length){
       $('#participants_count').text(props.length);
-      props.forEach((p,i)=>{
+      props.forEach((p, i) => {
         const name = p.user?.name || p.user_name || p.name || 'Unknown';
         const email = p.user?.email || p.user_email || p.email || '';
-        const type = p.user_id ? '<span class="badge bg-light text-dark">Internal</span>' : '<span class="badge bg-dark">External</span>';
-        list.append(`
+        const type = p.user_id
+          ? '<span class="badge bg-light text-dark">Internal</span>'
+          : '<span class="badge bg-dark">External</span>';
+        $list.append(`
           <div class="py-2 border-bottom">
             <div class="fw-bold">${i+1}. ${escapeHtml(name)} ${type}</div>
             <div class="small text-muted">${escapeHtml(email)}</div>
@@ -223,7 +288,7 @@ $(function(){
       });
     } else {
       $('#participants_count').text(0);
-      list.html('<small class="text-muted">No participants added.</small>');
+      $list.html('<small class="text-muted">No participants added.</small>');
     }
 
     detailsModal.show();
