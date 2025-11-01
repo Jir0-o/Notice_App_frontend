@@ -434,34 +434,44 @@ class MeetingDetailController extends Controller
 		DB::beginTransaction();
 		try {
 			$request->validate([
-				'title'              => 'sometimes|string|max:255',
-				'date'               => 'sometimes|date',
-				'start_time'         => 'sometimes|date_format:H:i',
-				'end_time'           => 'sometimes|date_format:H:i',
-				'meeting_id'         => 'sometimes|integer|exists:meetings,id',
-				'internal_users'     => 'nullable|array',
-				'internal_users.*'   => 'integer|exists:users,id',
-				'external_users'     => 'nullable|array',
+				'title'                  => 'sometimes|string|max:255',
+				'date'                   => 'sometimes|date',
+				'start_time'             => 'sometimes|date_format:H:i',
+				'end_time'               => 'sometimes|date_format:H:i',
+				'meeting_id'             => 'sometimes|integer|exists:meetings,id',
+				'internal_users'         => 'nullable|array',
+				'internal_users.*'       => 'integer|exists:users,id',
+				'external_users'         => 'nullable',
 				'external_users.*.email' => 'required_with:external_users|email',
 				'external_users.*.name'  => 'required_with:external_users|string|max:255',
-				'attachments'        => 'nullable|array',
-				'attachments.*'      => 'file|max:10240',
+				'attachments'            => 'nullable|array',
+				'attachments.*'          => 'file|max:10240',
 			]);
 
-			$detail = MeetingDetail::with(['propagations','meetingAttachments'])->findOrFail($id);
+			// 2) load current detail + current attendees
+			$detail = MeetingDetail::with(['propagations', 'meetingAttachments'])->findOrFail($id);
 
+			// 3) figure out target meeting + window
 			$targetMeetingId = (int) $request->input('meeting_id', $detail->meeting_id);
 			$targetMeeting   = Meeting::select('id','title')->findOrFail($targetMeetingId);
 
-			$date      = $request->filled('date')       ? Carbon::parse($request->input('date'))->toDateString() : $detail->date?->toDateString();
-			$startTime = $request->filled('start_time') ? $request->input('start_time') : $detail->start_time?->format('H:i');
-			$endTime   = $request->filled('end_time')   ? $request->input('end_time')   : $detail->end_time?->format('H:i');
+			$date      = $request->filled('date')
+				? Carbon::parse($request->input('date'))->toDateString()
+				: $detail->date?->toDateString();
 
-			// current attendees from DB
+			$startTime = $request->filled('start_time')
+				? $request->input('start_time')
+				: $detail->start_time?->format('H:i');
+
+			$endTime   = $request->filled('end_time')
+				? $request->input('end_time')
+				: $detail->end_time?->format('H:i');
+
+			// 4) current attendees from DB
 			$existingInternalIds = $detail->propagations
 				->whereNotNull('user_id')
 				->pluck('user_id')
-				->map(fn($v)=>(int)$v)
+				->map(fn($v) => (int) $v)
 				->values();
 
 			$existingExternals = $detail->propagations
@@ -469,29 +479,77 @@ class MeetingDetailController extends Controller
 				->map(fn($p) => ['name' => $p->user_name, 'email' => $p->user_email])
 				->values();
 
-			// incoming attendees (may fully replace)
+			/**
+			 * 5) incoming INTERNALS
+			 * If request has internal_users -> use that
+			 * else -> keep existing
+			 */
 			$internalIds = $request->has('internal_users')
-				? collect($request->input('internal_users', []))->filter()->map(fn($v)=>(int)$v)->unique()->values()
-				: $existingInternalIds;
-
-			$externalList = $request->has('external_users')
-				? collect($request->input('external_users', []))
-					->filter(fn($x) => !empty($x['email']) && !empty($x['name']))
-					->map(fn($x) => ['name' => $x['name'], 'email' => $x['email']])
+				? collect($request->input('internal_users', []))
+					->filter()
+					->map(fn($v) => (int) $v)
+					->unique()
 					->values()
-				: $existingExternals;
+				: $existingInternalIds;
 
 			$internalUsers = $internalIds->isNotEmpty()
 				? User::whereIn('id', $internalIds)->get(['id','email'])
 				: collect();
 
-			// ===== conflict check: SAME meeting, SAME date/time, but EXCLUDE this detail
+			/**
+			 * 6) incoming EXTERNALS  (THIS WAS THE PROBLEM PART)
+			 * Frontend may send:
+			 *   - external_users[]...
+			 *   - external_users="[]"
+			 *   - not send external_users at all
+			 *
+			 * We need to normalize it.
+			 */
+			$externalOverride = false; // did client actually send external_users?
+			$rawExternal = $request->input('external_users', null);
+
+			if ($request->has('external_users')) {
+				// client sent the key → we will override
+				$externalOverride = true;
+
+				if (is_string($rawExternal)) {
+					// comes from FormData like fd.append('external_users','[]')
+					$decoded = json_decode($rawExternal, true);
+					$rawExternal = is_array($decoded) ? $decoded : [];
+				}
+
+				if (is_array($rawExternal)) {
+					$externalList = collect($rawExternal)
+						->filter(fn($x) => !empty($x['email']) && !empty($x['name']))
+						->map(fn($x) => [
+							'name'  => $x['name'],
+							'email' => $x['email'],
+						])
+						->values();
+				} else {
+					// unknown / bad format → treat as empty
+					$externalList = collect();
+				}
+			} else {
+				// client did NOT send external_users → keep DB ones
+				$externalList = $existingExternals;
+			}
+
+			// 7) conflict check (same meeting, same window, except this detail)
 			$identities = collect();
 			foreach ($internalUsers as $u) {
-				$identities->push(['user_id'=>$u->id, 'user_name'=>null, 'user_email'=>$u->email]);
+				$identities->push([
+					'user_id'    => $u->id,
+					'user_name'  => null,
+					'user_email' => $u->email,
+				]);
 			}
 			foreach ($externalList as $e) {
-				$identities->push(['user_id'=>null, 'user_name'=>$e['name'], 'user_email'=>$e['email']]);
+				$identities->push([
+					'user_id'    => null,
+					'user_name'  => $e['name'],
+					'user_email' => $e['email'],
+				]);
 			}
 
 			$conflicts = [];
@@ -507,13 +565,15 @@ class MeetingDetailController extends Controller
 				$q = MeetingDetailspropagation::query()
 					->whereHas('meetingDetail', function ($md) use ($targetMeetingId, $detail, $date, $startTime, $endTime) {
 						$md->where('meeting_id', $targetMeetingId)
-							->where('id', '!=', $detail->id) // <--- this is what makes "this meeting user" ok
+							->where('id', '!=', $detail->id)     // allow same detail
 							->whereDate('date', $date)
 							->where('start_time', '<', $endTime)
 							->where('end_time',   '>', $startTime);
 					})
 					->where(function ($w) use ($who, $hasId, $hasNE) {
-						if ($hasId) $w->orWhere('user_id', (int) $who['user_id']);
+						if ($hasId) {
+							$w->orWhere('user_id', (int) $who['user_id']);
+						}
 						if ($hasNE) {
 							$w->orWhere(function ($x) use ($who) {
 								$x->where('user_name', $who['user_name'])
@@ -557,24 +617,24 @@ class MeetingDetailController extends Controller
 				], 422);
 			}
 
-			// ===== apply main update
+			// 8) update main detail
 			$detail->update([
 				'meeting_id' => $targetMeetingId,
 				'title'      => $request->input('title', $detail->title),
 				'date'       => $date,
 				'start_time' => $startTime,
 				'end_time'   => $endTime,
-				'agenda'     => $request->input('agenda', $detail->agenda), // allow agenda-only update
+				'agenda'     => $request->input('agenda', $detail->agenda),
 			]);
 
 			$newPropagationIdsToEmail = [];
 
-			// ===== internal sync
+			// 9) INTERNAL sync (your old logic, just kept)
 			if ($request->has('internal_users')) {
 				$existingInternalIdsArr = $detail->propagations()
 					->whereNotNull('user_id')
 					->pluck('user_id')
-					->map(fn($v)=>(int)$v)
+					->map(fn($v) => (int) $v)
 					->toArray();
 
 				$requestedInternalIds = $internalIds->toArray();
@@ -603,15 +663,15 @@ class MeetingDetailController extends Controller
 				}
 			}
 
-			
-			// Always sync externals — even if empty
-			if ($request->filled('external_users') || $request->has('external_users')) {
+			// 10) EXTERNAL sync (this is now bulletproof)
+			// If client sent external_users (even "[]") → wipe & re-add
+			if ($externalOverride) {
 				// remove all current external users
 				MeetingDetailspropagation::where('meeting_detail_id', $detail->id)
 					->whereNull('user_id')
 					->delete();
 
-				// re-add only if list not empty
+				// re-add only if not empty
 				if ($externalList->isNotEmpty()) {
 					foreach ($externalList as $e) {
 						$prop = $detail->propagations()->create([
@@ -626,7 +686,7 @@ class MeetingDetailController extends Controller
 				}
 			}
 
-			// ===== attachments (fixed)
+			// 11) attachments
 			if ($request->hasFile('attachments')) {
 				// delete old
 				foreach ($detail->meetingAttachments as $attachment) {
@@ -654,14 +714,14 @@ class MeetingDetailController extends Controller
 				}
 			}
 
-			// send emails only for new people
+			// 12) send emails for new ones only
 			if (!empty($newPropagationIdsToEmail)) {
 				dispatch(new SendMeetingEmailsJob($detail->id, $newPropagationIdsToEmail));
 			}
 
 			DB::commit();
 
-			$detail->loadCount('propagations','meetingAttachments');
+			$detail->loadCount('propagations', 'meetingAttachments');
 			if ($request->boolean('include') || str_contains((string) $request->query('include'), 'propagations')) {
 				$detail->load('propagations');
 			}

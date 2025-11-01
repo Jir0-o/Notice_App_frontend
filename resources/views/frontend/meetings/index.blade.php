@@ -996,14 +996,28 @@ $(function(){
     if (roomId) fd.append('meeting_id', roomId);
     const agendaHtml = agendaQuill?.root?.innerHTML || '';
     fd.append('agenda', agendaHtml);
+
+    // internal
     (selectedUsers || []).forEach((uid, i) => fd.append(`internal_users[${i}]`, uid));
+
+    // external
     (externalUsers || []).forEach((u, i) => {
       fd.append(`external_users[${i}][name]`, u.name || '');
       fd.append(`external_users[${i}][email]`, u.email || '');
     });
+
+    // 👇 force the key to exist
+    if (!externalUsers || externalUsers.length === 0) {
+      fd.append('external_users', '[]');
+    }
+
+    // files
     const files = $('#attachments')[0]?.files || [];
     Array.from(files).forEach((f, i) => fd.append(`attachments[${i}]`, f));
-    const url = recordId ? `${API_BASE}/meetings-details/${recordId}?include=true` : `${API_BASE}/meetings-details?include=true`;
+
+    const url = recordId
+      ? `${API_BASE}/meetings-details/${recordId}?include=true`
+      : `${API_BASE}/meetings-details?include=true`;
     if (recordId) fd.append('_method','PUT');
 
     $.ajax({
@@ -1013,7 +1027,8 @@ $(function(){
       processData: false,
       contentType: false,
       dataType: 'json'
-    }).done(res => {
+    })
+    .done(res => {
       const ok = res?.success === true || res?.status === 'success' || !!res?.data;
       if (ok) {
         t('success', res.message || 'Saved');
@@ -1022,11 +1037,14 @@ $(function(){
       } else {
         t('error', res?.message || 'Failed');
       }
-    }).fail(xhr => {
+    })
+    .fail(xhr => {
       const msg = xhr.responseJSON?.message || xhr.responseText || 'Server error';
       t('error', msg);
-    }).always(() => $('#btn-save').prop('disabled', false));
+    })
+    .always(() => $('#btn-save').prop('disabled', false));
   });
+
 
   $('#btn-delete').on('click', function(){
     const id = $('#form_meeting_record_id').val();
