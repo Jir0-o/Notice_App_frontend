@@ -166,5 +166,46 @@
         })();
         </script>
 
+  <script>
+  (function () {
+      // pages that do NOT need token
+      const publicPaths = [
+          '/ext/login',
+          '/login',
+          '/',
+      ];
+
+      let path = window.location.pathname;
+      // normalize trailing slash
+      if (path.length > 1 && path.endsWith('/')) {
+          path = path.slice(0, -1);
+      }
+
+      // if current page is public -> do nothing
+      if (publicPaths.includes(path)) {
+          return;
+      }
+
+      const token = localStorage.getItem('api_token');
+
+      // no token -> go to login
+      if (!token) {
+          window.location.href = '/ext/login';
+          return;
+      }
+
+      // set global ajax header
+      if (window.$) {
+          $.ajaxSetup({
+              beforeSend: function (xhr) {
+                  xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+              }
+          });
+      }
+  })();
+  </script>
+
+
+
   </body>
 </html>

@@ -12,6 +12,9 @@ Route::get('/', function () {
 
 // External Views
 Route::view('/ext/login', 'frontend.ext.login')->name('ext.login');
+
+Route::middleware('web', 'front.token')->group(function () {
+
 Route::view('/ext/panel', 'frontend.ext.panel')->name('ext.panel');
 
 // Super Admin Routes
@@ -58,3 +61,5 @@ Route::get('/dashboard', function () {
 
 // User Resource Controller
 Route::resource('users', UserController::class);
+
+});
