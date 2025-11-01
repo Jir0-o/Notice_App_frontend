@@ -110,8 +110,15 @@
 
           <div class="row gy-3">
             <div class="col-md-4">
-              <label class="form-label">Departments</label>
-              <div id="departmentsBox" class="side-box small-muted">Loading...</div>
+            <label class="form-label d-flex justify-content-between align-items-center">
+              <span>Departments</span>
+              <span class="form-check m-0">
+                <input class="form-check-input" type="checkbox" id="selectAllDepartments">
+                <label class="form-check-label small" for="selectAllDepartments">All</label>
+              </span>
+            </label>
+            <div id="departmentsBox" class="side-box small-muted">Loading...</div>
+
             </div>
 
             <div class="col-md-4">
@@ -293,19 +300,51 @@
         console.error('loadDepartments', err);
       });
   }
+
   function renderDepartments(){
     const $box = $('#departmentsBox').empty();
-    if (!departments.length) { $box.html('<small class="text-muted">No departments</small>'); return; }
+    if (!departments.length) {
+      $box.html('<small class="text-muted">No departments</small>');
+      $('#selectAllDepartments').prop('checked', false);
+      return;
+    }
+
     departments.forEach(function(d){
-      const item = $(
+      $box.append(
         '<div class="form-check">' +
-          '<input class="form-check-input dept-checkbox" type="checkbox" id="dept-' + d.id + '" value="' + d.id + '"/>' +
+          '<input class="form-check-input dept-checkbox" type="checkbox" id="dept-' + d.id + '" value="' + d.id + '">' +
           '<label class="form-check-label" for="dept-' + d.id + '">' + escapeHtml(d.name || d.title || '') + '</label>' +
         '</div>'
       );
-      $box.append(item);
     });
+
+    // if all dept already loaded in state and all are selected, sync master
+    const allChecked = $('#departmentsBox .dept-checkbox').length &&
+                      $('#departmentsBox .dept-checkbox').length === $('#departmentsBox .dept-checkbox:checked').length;
+    $('#selectAllDepartments').prop('checked', allChecked);
   }
+
+
+  $(document).on('change', '#selectAllDepartments', function () {
+    const checked = this.checked;
+
+    // toggle all department checkboxes
+    $('#departmentsBox .dept-checkbox').each(function () {
+      const was = $(this).is(':checked');
+      $(this).prop('checked', checked);
+
+      // only call fetch if we changed its state
+      const depId = $(this).val();
+      if (checked && !was) {
+        fetchDepartmentUsers(depId).then(() => renderUsersBox());
+      }
+      if (!checked && was) {
+        delete departmentUsers[depId];
+        renderUsersBox();
+      }
+    });
+  });
+
 
   // ---------- Department users ----------
   function fetchDepartmentUsers(depId){
@@ -815,16 +854,22 @@
   });
 
   // when department checkbox changes -> load users
-  $(document).on('change', '.dept-checkbox', function(){
-    const depId = $(this).val();
-    const checked = $(this).is(':checked');
-    if (checked) {
-      fetchDepartmentUsers(depId).then(()=> renderUsersBox());
-    } else {
-      delete departmentUsers[depId];
-      renderUsersBox();
-    }
-  });
+    $(document).on('change', '.dept-checkbox', function(){
+      const depId = $(this).val();
+      const checked = $(this).is(':checked');
+      if (checked) {
+        fetchDepartmentUsers(depId).then(()=> renderUsersBox());
+      } else {
+        delete departmentUsers[depId];
+        renderUsersBox();
+      }
+
+      // sync master
+      const total = $('#departmentsBox .dept-checkbox').length;
+      const selected = $('#departmentsBox .dept-checkbox:checked').length;
+      $('#selectAllDepartments').prop('checked', total > 0 && total === selected);
+    });
+
 
   // when user-checkbox toggled -> update ONLY tempSelectedIds
   $(document).on('change', '.user-checkbox', function(){

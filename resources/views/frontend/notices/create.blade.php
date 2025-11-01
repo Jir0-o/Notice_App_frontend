@@ -33,7 +33,7 @@
           <div class="mb-3">
             <label class="form-label">Notice Description</label>
             <div id="quillEditor" style="height:220px;background:#fff;"></div>
-            <input type="hidden" id="descriptionInput" placeholder="Enter notice description" name="description">
+            <input type="hidden" id="descriptionInput" name="description">
             <div class="invalid-feedback d-block" id="error_description"></div>
           </div>
 
@@ -43,11 +43,19 @@
           </div>
 
           <div class="row mb-3">
+            {{-- Departments --}}
             <div class="col-md-4">
-              <label>Departments (<span id="deptCount">0</span>)</label>
+              <label class="d-flex justify-content-between align-items-center mb-1">
+                <span>Departments (<span id="deptCount">0</span>)</span>
+                <span class="form-check m-0">
+                  <input type="checkbox" class="form-check-input" id="deptAll">
+                  <label for="deptAll" class="form-check-label small">All</label>
+                </span>
+              </label>
               <div id="departmentsList" class="border p-2" style="height:260px; overflow:auto">Loading...</div>
             </div>
 
+            {{-- Department Users --}}
             <div class="col-md-4">
               <div class="d-flex justify-content-between align-items-center">
                 <label class="mb-0">Department Users</label>
@@ -61,6 +69,7 @@
               </div>
             </div>
 
+            {{-- Selected --}}
             <div class="col-md-4">
               <label>Selected Recipients (<span id="totalSelected">0</span>)</label>
               <div id="selectedPreview" class="border p-2" style="height:260px; overflow:auto">
@@ -102,7 +111,7 @@
       </div>
     </div>
 
-    {{-- External user modal (Bootstrap 5) --}}
+    {{-- External user modal --}}
     <div class="modal fade" id="externalModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -134,13 +143,13 @@
 
     {{-- libs --}}
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
     $(function () {
-      // ----- CONFIG -----
       const API = '{{ url("/") }}/api';
       const token = localStorage.getItem('api_token') || null;
 
@@ -154,30 +163,27 @@
         }
       });
 
-      // ----- QUILL -----
       const quill = new Quill('#quillEditor', { theme: 'snow' });
 
-      // ----- STATE -----
       let departments = [];
       let selectedDepartments = [];
-      let departmentUsers = {}; // depId -> users[]
-      let finalSelectedUsers = []; // [{id,name,email}]
-      let externalUsers = [];     // [{name,email}]
-      let selectedFiles = [];     // File[]
+      let departmentUsers = {};     // depId -> users[]
+      let finalSelectedUsers = [];  // internal
+      let externalUsers = [];       // external
+      let selectedFiles = [];
       const MAX_FILE_MB = 10;
       const MAX_FILES = 20;
       const ALLOWED_EXT = ['pdf','doc','docx','xlsx','xls','jpg','jpeg','png'];
 
-      // ----- HELPERS -----
       function t(msg, type='success'){ toastr[type](msg); }
-        function escapeHtml(s){
+      function escapeHtml(s){
         return String(s || '')
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
-        }
+      }
       function emailValid(e){ return /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(String(e||'').trim()); }
       function extOf(file){ return (file.name.split('.').pop()||'').toLowerCase(); }
 
@@ -187,43 +193,42 @@
         renderSelectedPreview();
       }
 
-        function renderSelectedPreview() {
-            const $box = $('#selectedPreview').empty();
-            const combined = [
-                ...finalSelectedUsers.map(u => ({ ...u, __type: 'internal' })),
-                ...externalUsers.map(x => ({ ...x, id: null, __type: 'external' }))
-            ];
-            if (!combined.length) {
-                $box.append('<div class="text-muted">No recipients selected</div>');
-                return;
-            }
-            combined.forEach(u => {
-                const isInternal = u.__type === 'internal';
-                const badge = isInternal
-                    ? '<span class="badge bg-success ms-2">Internal</span>'
-                    : '<span class="badge bg-secondary ms-2">External</span>';
-                const dataAttr = isInternal
-                    ? `data-int-id="${u.id}"`
-                    : `data-ext-email="${escapeHtml(u.email || '')}"`;
-
-                const row =
-                    `<div class="d-flex justify-content-between align-items-center border-bottom py-1">
-            <div class="me-2">
-            <div class="fw-semibold truncate" title="${escapeHtml(u.name)}">
-                ${escapeHtml(u.name)} ${badge}
-            </div>
-            <div class="small text-muted truncate" title="${escapeHtml(u.email || '')}">
-                ${escapeHtml(u.email || '')}
-            </div>
-            </div>
-            <div>
-            <button class="btn btn-sm btn-link text-danger remove-recipient" ${dataAttr}>Remove</button>
-            </div>
-        </div>`;
-                $box.append(row);
-            });
+      function renderSelectedPreview() {
+        const $box = $('#selectedPreview').empty();
+        const combined = [
+          ...finalSelectedUsers.map(u => ({ ...u, __type: 'internal' })),
+          ...externalUsers.map(x => ({ ...x, id: null, __type: 'external' }))
+        ];
+        if (!combined.length) {
+          $box.append('<div class="text-muted">No recipients selected</div>');
+          return;
         }
+        combined.forEach(u => {
+          const isInternal = u.__type === 'internal';
+          const badge = isInternal
+              ? '<span class="badge bg-success ms-2">Internal</span>'
+              : '<span class="badge bg-secondary ms-2">External</span>';
+          const dataAttr = isInternal
+              ? `data-int-id="${u.id}"`
+              : `data-ext-email="${escapeHtml(u.email || '')}"`;
 
+          $box.append(
+            `<div class="d-flex justify-content-between align-items-center border-bottom py-1">
+              <div class="me-2">
+                <div class="fw-semibold truncate" title="${escapeHtml(u.name)}">
+                  ${escapeHtml(u.name)} ${badge}
+                </div>
+                <div class="small text-muted truncate" title="${escapeHtml(u.email || '')}">
+                  ${escapeHtml(u.email || '')}
+                </div>
+              </div>
+              <div>
+                <button class="btn btn-sm btn-link text-danger remove-recipient" ${dataAttr}>Remove</button>
+              </div>
+            </div>`
+          );
+        });
+      }
 
       function renderExternalList(){
         const $list = $('#externalList').empty();
@@ -241,13 +246,11 @@
         });
       }
 
-      // ----- FILES -----
+      // FILES
       const $fileInput = $('#fileInput');
       const $drop = $('#dropArea');
 
-      function showFileError(msg){
-        $('#fileError').text(msg || '');
-      }
+      function showFileError(msg){ $('#fileError').text(msg || ''); }
 
       function validateAndPush(files){
         let err = '';
@@ -295,7 +298,7 @@
         renderFiles();
       });
 
-      // ----- EXTERNAL MODAL -----
+      // EXTERNAL MODAL
       const externalModal = new bootstrap.Modal(document.getElementById('externalModal'));
       $('#openExternalModal').on('click', function(){ renderExternalList(); externalModal.show(); });
       $('#closeExternalModal').on('click', function(){ externalModal.hide(); });
@@ -319,15 +322,12 @@
         renderExternalList(); updateCounts();
       });
 
-      // preview remove (internal/external)
       $('#selectedPreview').on('click', '.remove-recipient', function(){
-        const $row = $(this).closest('.d-flex');
         const intId = $(this).attr('data-int-id');
         const extEmail = $(this).attr('data-ext-email');
         if(intId){
           const id = Number(intId);
           finalSelectedUsers = finalSelectedUsers.filter(u => u.id !== id);
-          // uncheck if visible in list
           $('#departmentUsers input[type=checkbox][data-id="'+id+'"]').prop('checked', false);
         } else if(extEmail){
           externalUsers = externalUsers.filter(u => u.email !== extEmail);
@@ -336,7 +336,7 @@
         updateCounts();
       });
 
-      // ----- DEPARTMENTS & USERS -----
+      // DEPARTMENTS
       function loadDepartments(){
         $('#departmentsList').html('Loading...');
         $.get(`${API}/departments-data`)
@@ -360,54 +360,40 @@
       }
       loadDepartments();
 
-      // when dept toggled
-      $('#departmentsList').on('change', '.dept-checkbox', function(){
-        const depId = Number(this.value);
-        if(this.checked){
-          if(!selectedDepartments.includes(depId)) selectedDepartments.push(depId);
-          if(!departmentUsers[depId]){
-            $.get(`${API}/notices/department-users/${depId}`)
-              .done(function(res){
-                departmentUsers[depId] = (res && res.data) ? res.data : res;
-                renderDepartmentUsers();
-              })
-              .fail(function(){
-                // fallback to /users list
-                $.get(`${API}/users`).done(function(all){
-                  const arr = (all && all.data) ? all.data : all;
-                  const filtered = (arr||[]).filter(u => String(u.department_id||'') === String(depId)
-                    || (u.department && String(u.department.id||u.department.department_id||'') === String(depId)));
-                  departmentUsers[depId] = filtered;
-                  renderDepartmentUsers();
-                }).fail(() => Swal.fire('Error','Failed to load users','error'));
-              });
-          } else {
-            renderDepartmentUsers();
-          }
-        } else {
-          selectedDepartments = selectedDepartments.filter(x => x !== depId);
-          renderDepartmentUsers();
-        }
-        updateCounts();
-      });
+      // fetch users of one dept
+      function fetchDeptUsers(depId){
+        return $.get(`${API}/notices/department-users/${depId}`)
+          .then(function(res){
+            departmentUsers[depId] = (res && res.data) ? res.data : res;
+          })
+          .catch(function(){
+            // fallback generic
+            return $.get(`${API}/users`).then(function(all){
+              const arr = (all && all.data) ? all.data : all;
+              const filtered = (arr||[]).filter(u => String(u.department_id||'') === String(depId)
+                || (u.department && String(u.department.id||u.department.department_id||'') === String(depId)));
+              departmentUsers[depId] = filtered;
+            });
+          });
+      }
 
-    function renderDepartmentUsers() {
+      // render users from current selectedDepartments
+      function renderDepartmentUsers() {
         const $box = $('#departmentUsers').empty();
         if (!selectedDepartments.length) {
-            $box.html('<small class="text-muted">Choose departments to see users</small>');
-            $('#toggleAllUsers').prop('checked', false);
-            return;
+          $box.html('<small class="text-muted">Choose departments to see users</small>');
+          $('#toggleAllUsers').prop('checked', false);
+          return;
         }
-        // flatten unique
         const flat = [];
         const seen = {};
         selectedDepartments.forEach(id => {
-            (departmentUsers[id] || []).forEach(u => {
-                if (u && u.id != null && !seen[u.id]) {
-                    seen[u.id] = true;
-                    flat.push(u);
-                }
-            });
+          (departmentUsers[id] || []).forEach(u => {
+            if (u && u.id != null && !seen[u.id]) {
+              seen[u.id] = true;
+              flat.push(u);
+            }
+          });
         });
         if (!flat.length) { $box.html('<small class="text-muted">No users for selected departments</small>'); return; }
 
@@ -415,23 +401,70 @@
         $('#toggleAllUsers').prop('checked', allSelected);
 
         flat.forEach(u => {
-            const checked = finalSelectedUsers.some(x => x.id === u.id) ? 'checked' : '';
-            const name = escapeHtml(u.name || 'User');
-            const email = escapeHtml(u.email || '');
-            $box.append(
-                `<label class="form-check d-block">
-            <input class="form-check-input me-2 dep-user" type="checkbox" ${checked}
-                    data-id="${u.id}" data-name="${name}" data-email="${email}">
-            <span class="form-check-label">
-            <strong>${name}</strong>
-            <small class="text-muted">(${email || 'no email'})</small>
-            </span>
-        </label>`
-            );
+          const checked = finalSelectedUsers.some(x => x.id === u.id) ? 'checked' : '';
+          const name = escapeHtml(u.name || 'User');
+          const email = escapeHtml(u.email || '');
+          $box.append(
+            `<label class="form-check d-block">
+              <input class="form-check-input me-2 dep-user" type="checkbox" ${checked}
+                     data-id="${u.id}" data-name="${name}" data-email="${email}">
+              <span class="form-check-label">
+                <strong>${name}</strong>
+                <small class="text-muted">(${email || 'no email'})</small>
+              </span>
+            </label>`
+          );
         });
-    }
+      }
 
-      // select all in current view
+      // single dept toggle
+      $('#departmentsList').on('change', '.dept-checkbox', function(){
+        const depId = Number(this.value);
+        if (this.checked) {
+          if (!selectedDepartments.includes(depId)) selectedDepartments.push(depId);
+          if (!departmentUsers[depId]) {
+            fetchDeptUsers(depId).then(() => {
+              renderDepartmentUsers();
+            });
+          } else {
+            renderDepartmentUsers();
+          }
+        } else {
+          selectedDepartments = selectedDepartments.filter(x => x !== depId);
+          renderDepartmentUsers();
+        }
+
+        // sync master
+        const allChecked = selectedDepartments.length === departments.length && departments.length > 0;
+        $('#deptAll').prop('checked', allChecked);
+
+        updateCounts();
+      });
+
+      // master dept select-all
+      $('#deptAll').on('change', function(){
+        const checked = $(this).is(':checked');
+        $('#departmentsList .dept-checkbox').prop('checked', checked);
+        if (checked) {
+          selectedDepartments = departments.map(d => Number(d.id));
+          // fetch for all, then render once
+          const fetches = selectedDepartments.map(id => {
+            if (departmentUsers[id]) return Promise.resolve();
+            return fetchDeptUsers(id);
+          });
+          Promise.all(fetches).then(() => {
+            renderDepartmentUsers();
+            updateCounts();
+          });
+        } else {
+          selectedDepartments = [];
+          departmentUsers = {};
+          renderDepartmentUsers();
+          updateCounts();
+        }
+      });
+
+      // select all users
       $('#toggleAllUsers').on('change', function(){
         const checked = this.checked;
         $('#departmentUsers .dep-user').each(function(){
@@ -466,7 +499,7 @@
         updateCounts();
       });
 
-      // ----- SUBMIT -----
+      // SUBMIT
       function submitNotice(isDraft){
         $('#alertBox').empty();
         $('#error_title').text('');
@@ -474,29 +507,21 @@
 
         const title = $('#title').val().trim();
         const descriptionHtml = quill.root.innerHTML;
+        const plain = quill.getText().trim();
 
         if(!title){ $('#error_title').text('Title is required'); return; }
-        // (optional) ensure not empty editor
-        const plain = quill.getText().trim();
         if(!plain){ $('#error_description').text('Description is required'); return; }
 
         const fd = new FormData();
         fd.append('title', title);
         fd.append('description', descriptionHtml);
 
-        // departments
         selectedDepartments.forEach((depId, i) => fd.append(`departments[${i}]`, depId));
-
-        // internal users
         finalSelectedUsers.forEach((u, i) => fd.append(`internal_users[${i}]`, u.id));
-
-        // external users
         externalUsers.forEach((u, i) => {
           fd.append(`external_users[${i}][name]`, u.name);
           fd.append(`external_users[${i}][email]`, u.email);
         });
-
-        // files
         selectedFiles.forEach((f, i) => fd.append(`attachments[${i}]`, f));
 
         const url = isDraft ? `${API}/notices/draft` : `${API}/notices`;
@@ -518,10 +543,10 @@
             timer: 1200,
             showConfirmButton: false
           }).then(function(){
-            // redirect to route
             window.location.href = '{{ route("notices.index") }}';
-            });
-          // reset form
+          });
+
+          // reset local state
           finalSelectedUsers = [];
           externalUsers = [];
           selectedFiles = [];
@@ -529,16 +554,13 @@
           departmentUsers = {};
 
           $('#departmentsList input[type=checkbox]').prop('checked', false);
-          $('#departmentUsers').empty().html('<small class="text-muted">Choose departments first</small>');
+          $('#deptAll').prop('checked', false);
+          $('#departmentUsers').html('<small class="text-muted">Choose departments first</small>');
           $('#title').val('');
           quill.setContents([]);
-
           $('#filesPreview').empty();
           $('#externalList').empty();
           updateCounts();
-
-          // optional redirect:
-          // setTimeout(() => location.href = '/notices', 1200);
         })
         .fail(function(xhr){
           if(xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors){

@@ -5,20 +5,12 @@
 <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet" />
 <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet" />
 <style>
-  .modal-panel {
-    max-width: 1000px;
-    width: 98%;
-    max-height: 92vh;
-    margin: 0 auto;
-  }
-  .modal-panel .modal-content {
-    max-height: 92vh;
-    overflow: auto;
-  }
+  .modal-panel { max-width: 1000px; width: 98%; max-height: 92vh; margin: 0 auto; }
+  .modal-panel .modal-content { max-height: 92vh; overflow: auto; }
   .side-box {
     max-height: 32vh;
     overflow:auto;
-    padding:.5rem;
+    padding:.5rem .7rem;
     border:1px solid #e3e3e3;
     border-radius:6px;
     background:#fff;
@@ -28,12 +20,7 @@
   .file-chip { border:1px solid #ddd; border-radius:8px; padding:.25rem .5rem; display:inline-flex; gap:.5rem; align-items:center; margin:.25rem .25rem 0 0; }
   .file-chip button { border:none; background:none; color:#dc3545; }
   #meetingModal .modal-body { background: #f7f8f9; }
-  /* center note */
-  .update-note {
-    font-size: .8rem;
-    color: #b30000;
-    text-align: center;
-  }
+  .update-note { font-size: .8rem; color: #b30000; text-align: center; }
 </style>
 
 <div class="card">
@@ -57,7 +44,6 @@
           <h5 id="meetingModalTitle" class="modal-title flex-grow-1">Create Meeting</h5>
           <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <!-- this one only on UPDATE -->
         <div id="meetingUpdateNote" class="update-note mt-1" style="display:none;">
           একই তারিখ ও স্মারকে স্থলাভিষিক্ত হবে।
         </div>
@@ -74,7 +60,6 @@
           <div class="row g-2">
             <div class="col-md-4 mb-3">
               <label class="form-label">Date</label>
-              <!-- date picker -->
               <input type="date" name="date" id="date" class="form-control" />
             </div>
             <div class="col-md-4 mb-3">
@@ -125,11 +110,19 @@
           </div>
 
           <div class="row gy-3">
+            <!-- Departments box with select-all -->
             <div class="col-md-3">
-              <label class="form-label">Departments</label>
+              <label class="form-label mb-1 d-flex justify-content-between align-items-center">
+                <span>Departments</span>
+                <span class="form-check m-0">
+                  <input type="checkbox" class="form-check-input" id="dept-all">
+                  <label for="dept-all" class="form-check-label small">All</label>
+                </span>
+              </label>
               <div id="departmentsBox" class="side-box"></div>
             </div>
 
+            <!-- Users -->
             <div class="col-md-3">
               <div class="d-flex justify-content-between align-items-center mb-1">
                 <label class="form-label mb-0">Internal users</label>
@@ -141,6 +134,7 @@
               <div id="usersBox" class="side-box">Select departments to load users</div>
             </div>
 
+            <!-- Selected preview -->
             <div class="col-md-6">
               <label class="form-label">Selected recipients (<span id="selectedCount">0</span>)</label>
               <div id="selectedPreview" class="side-box"></div>
@@ -276,9 +270,9 @@ $(function(){
 
   let calendar = null, currentEvent = null;
   let departments = [];
-  let departmentUsers = {};
-  let selectedUsers = [];
-  let finalSelectedUsers = [];
+  let departmentUsers = {};       // {deptId: [users]}
+  let selectedUsers = [];         // ids for payload
+  let finalSelectedUsers = [];    // [{id,name,email}]
   let externalUsers = [];
   let existingAtts = [];
   let agendaQuill = null;
@@ -378,22 +372,27 @@ $(function(){
       });
   }
 
+  // draw dept checkboxes exactly like screenshot
   function renderDepartments(){
     const box = $('#departmentsBox').empty();
+    $('#dept-all').prop('checked', false);
+
     if (!departments.length) {
       box.html('<small class="text-muted">No departments found</small>');
       return;
     }
+
     departments.forEach(d => {
       box.append(`
-        <div class="form-check">
+        <div class="form-check mb-1">
           <input class="form-check-input dept-checkbox" type="checkbox" value="${String(d.id)}" id="dept-${d.id}">
           <label class="form-check-label" for="dept-${d.id}">${escapeHtml(d.name || d.title || '')}</label>
         </div>
       `);
     });
   }
- 
+
+  // fetch users for one department
   function fetchDepartmentUsers(depId){
     const date  = $('#date').val();
     const start = $('#start_time').val();
@@ -422,6 +421,27 @@ $(function(){
             return [];
           });
       });
+  }
+
+  // fetch for all checked departments
+  function loadUsersForCheckedDepartments(){
+    const checkedIds = $('.dept-checkbox:checked').map(function(){ return $(this).val(); }).get();
+
+    if (!checkedIds.length) {
+      departmentUsers = {};
+      renderUsersBox();
+      $('#dept-all').prop('checked', false);
+      return;
+    }
+
+    // if all depts checked, sync master checkbox
+    const allChecked = checkedIds.length === departments.length;
+    $('#dept-all').prop('checked', allChecked);
+
+    const jobs = checkedIds.map(id => fetchDepartmentUsers(id));
+    Promise.all(jobs).then(() => {
+      renderUsersBox();
+    });
   }
 
   function renderUsersBox(){
@@ -454,6 +474,7 @@ $(function(){
     });
   }
 
+  // select all (skip busy) for users
   $('#selectAllNonBusy').on('change', function(){
     const check = this.checked;
     const all = Object.values(departmentUsers).flat();
@@ -510,6 +531,7 @@ $(function(){
     refreshSelectedPreview();
   }
 
+  // attachments preview
   $('#attachments').on('change', function(){
     const files = Array.from(this.files || []);
     const pv = $('#attachmentsPreview').empty();
@@ -521,17 +543,24 @@ $(function(){
     $(this).closest('.file-chip').remove();
   });
 
+  // dept checkbox change
   $(document).on('change', '.dept-checkbox', function(){
-    const depId = $(this).val();
+    loadUsersForCheckedDepartments();
+  });
+
+  // master dept select-all
+  $('#dept-all').on('change', function(){
     const checked = $(this).is(':checked');
+    $('.dept-checkbox').prop('checked', checked);
     if (checked) {
-      fetchDepartmentUsers(depId).then(() => renderUsersBox());
+      loadUsersForCheckedDepartments();
     } else {
-      delete departmentUsers[depId];
+      departmentUsers = {};
       renderUsersBox();
     }
   });
 
+  // user checkbox
   $(document).on('change', '.user-checkbox', function(){
     const id = Number($(this).data('id'));
     let found = null;
@@ -549,6 +578,7 @@ $(function(){
     refreshSelectedPreview();
   });
 
+  // remove chip
   $(document).on('click', '.btn-remove', function(){
     const id = $(this).data('id');
     const email = $(this).data('email');
@@ -567,6 +597,7 @@ $(function(){
     addExternalUser(($('#ext_name').val() || '').trim(), ($('#ext_email').val() || '').trim());
   });
 
+  // rooms
   function fetchRooms(date, start, end){
     if (!date || !start || !end) {
       $('#roomInfo').text('Enter start & end to load rooms');
@@ -609,7 +640,6 @@ $(function(){
     }
   });
 
-  // if date manually changed, reload rooms (because backend may check conflicts by date)
   $('#date').on('change', function(){
     const date  = $('#date').val();
     const start = $('#start_time').val();
@@ -627,7 +657,7 @@ $(function(){
     return `${hh}:${mm}`;
   }
 
-  // CREATE
+  // create modal open
   function openCreateModal(dateStr){
     currentEvent = null;
     $('#meetingModalTitle').text('Create Meeting');
@@ -643,8 +673,8 @@ $(function(){
     $('#room_id').empty().append('<option value="">Select room</option>');
     $('#roomInfo').text('Enter start & end to load rooms');
     $('#btn-delete').hide();
+    $('#dept-all').prop('checked', false);
 
-    // date from calendar OR today fallback
     if (dateStr) {
       $('#date').val(dateStr);
     } else {
@@ -655,7 +685,6 @@ $(function(){
       $('#date').val(`${y}-${m}-${d}`);
     }
 
-    // current time
     const now = new Date();
     const hh  = String(now.getHours()).padStart(2, '0');
     const mm  = String(now.getMinutes()).padStart(2, '0');
@@ -672,6 +701,7 @@ $(function(){
     renderUsersBox();
   }
 
+  // event details
   function showEventDetails(event){
     const ext = event.extendedProps || {};
     function fmt(dt){
@@ -784,6 +814,7 @@ $(function(){
     if (eventDetailsModal) eventDetailsModal.show();
   }
 
+  // edit modal
   function openEditModalFromEvent(eventObj){
     const m = eventObj.extendedProps || {};
 
@@ -860,6 +891,7 @@ $(function(){
     userChangedEndTime = true;
   }
 
+  // submit meeting
   $('#meetingForm').on('submit', function(e){
     e.preventDefault();
     $('#btn-save').prop('disabled', true);
@@ -936,6 +968,8 @@ $(function(){
       .catch(() => {});
   }
   $('#btn-refresh').on('click', reloadAll);
+
+  // boot
   reloadAll();
 });
 </script>

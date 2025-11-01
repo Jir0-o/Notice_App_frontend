@@ -28,16 +28,31 @@
             </div>
 
             <div class="row mb-3">
+                {{-- Departments --}}
                 <div class="col-md-4">
-                    <label>Departments</label>
+                    <label class="d-flex justify-content-between align-items-center">
+                        <span>Departments</span>
+                        <span class="form-check m-0">
+                            <input class="form-check-input" type="checkbox" id="deptAll">
+                            <label class="form-check-label small" for="deptAll">All</label>
+                        </span>
+                    </label>
                     <div id="departmentsList" class="border p-2" style="height:260px; overflow:auto"></div>
                 </div>
 
+                {{-- Department users --}}
                 <div class="col-md-4">
-                    <label>Department Users</label>
-                    <div id="departmentUsers" class="border p-2" style="height:260px; overflow:auto"></div>
+                <label class="d-flex justify-content-between align-items-center mb-1">
+                    <span>Department Users</span>
+                    <span class="form-check m-0">
+                    <input class="form-check-input" type="checkbox" id="depUsersAll">
+                    <label class="form-check-label small" for="depUsersAll">All</label>
+                    </span>
+                </label>
+                <div id="departmentUsers" class="border p-2" style="height:260px; overflow:auto"></div>
                 </div>
 
+                {{-- Selected --}}
                 <div class="col-md-4">
                     <label>Selected Recipients</label>
                     <div id="selectedPreview" class="border p-2" style="height:260px; overflow:auto"></div>
@@ -61,10 +76,7 @@
                       your previously uploaded files... If you upload new file your previously uploaded file will be deleted
                     </p>
 
-                    <!-- previous server attachments -->
                     <div id="previousFilesPreview" class="d-flex flex-wrap gap-2 mb-2"></div>
-
-                    <!-- new selected files preview -->
                     <div id="filesPreview" class="d-flex flex-wrap gap-2"></div>
                 </div>
             </div>
@@ -76,7 +88,7 @@
     </div>
 </div>
 
-<!-- external modal -->
+{{-- External modal --}}
 <div class="modal fade" id="externalModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
@@ -96,13 +108,11 @@
   </div>
 </div>
 
-<!-- scripts -->
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <style>
-/* previews styling */
 .prev-file-card, .new-file-card {
   width: 160px;
   border: 1px solid #e6e6e6;
@@ -120,7 +130,6 @@
 
 <script>
 $(function(){
-    // Blade-provided id (guarded)
     const id = @json($id ?? null);
     if (!id) {
         $('#alertBox').html('<div class="alert alert-danger">Notice id missing.</div>');
@@ -130,7 +139,6 @@ $(function(){
     const API = '{{ url("/") }}/api';
     const token = localStorage.getItem('api_token') || null;
 
-    // Setup AJAX headers (CSRF + Auth)
     $.ajaxSetup({
         headers: {'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || ''},
         beforeSend(xhr){
@@ -138,21 +146,18 @@ $(function(){
         }
     });
 
-    // Allowed extensions and max size (10 MB)
     const ALLOWED_EXT = ['pdf','doc','docx','xlsx','xls','jpg','jpeg','png'];
-    const MAX_BYTES = 10 * 1024 * 1024; // 10MB
+    const MAX_BYTES   = 10 * 1024 * 1024;
 
-    // state
-    let departmentUsers = {}; // depId => users[]
+    let departments     = [];
+    let departmentUsers = {};
     let selectedDepartments = [];
-    let finalSelectedUsers = []; // internal users: {id,name,email}
-    let externalUsers = []; // {name,email}
-    let selectedFiles = []; // File[]
+    let finalSelectedUsers  = [];
+    let externalUsers       = [];
+    let selectedFiles       = [];
 
-    // Quill
     const quill = new Quill('#quillEditor', { theme: 'snow' });
 
-    // helpers
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
     function isImageExt(name){
         const ext = (name.split('.').pop()||'').toLowerCase();
@@ -163,7 +168,7 @@ $(function(){
         return item.file_url || item.url || item.file_path || (item.file_name ? `/storage/${item.file_name}` : '#');
     }
 
-    // -------- Previous attachments preview ----------
+    // ----- previous attachments -----
     function renderPreviousAttachments(arr){
         const $wrap = $('#previousFilesPreview').empty();
         if(!arr || !arr.length){
@@ -173,13 +178,14 @@ $(function(){
         $('#prevFilesMsg').show();
         arr.forEach(it=>{
             const fname = it.file_name || it.name || 'file';
-            const url = fileUrlFor(it);
+            const url   = fileUrlFor(it);
             const $card = $('<div>').addClass('prev-file-card').attr('title', fname);
             if(isImageExt(fname)){
-                const $img = $('<img>').addClass('prev-file-thumb').attr('src', url).on('error', function(){ $(this).attr('src','https://via.placeholder.com/160x88?text=No+Image'); });
+                const $img = $('<img>').addClass('prev-file-thumb').attr('src', url)
+                  .on('error', function(){ $(this).attr('src','https://via.placeholder.com/160x88?text=No+Image'); });
                 $card.append($img);
             } else {
-                $card.append(`<div class="file-icon">📄</div>`);
+                $card.append('<div class="file-icon">📄</div>');
             }
             const display = $('<div>').addClass('file-name');
             if(url !== '#'){
@@ -192,7 +198,7 @@ $(function(){
         });
     }
 
-    // -------- New files preview ----------
+    // ----- new files -----
     function renderFiles(){
         const $fp = $('#filesPreview').empty();
         if (!selectedFiles.length){
@@ -211,7 +217,7 @@ $(function(){
                 reader.readAsDataURL(f);
                 $card.append($img);
             } else {
-                $card.append(`<div class="file-icon">📄</div>`);
+                $card.append('<div class="file-icon">📄</div>');
             }
             $card.append(`<div class="file-name">${escapeHtml(f.name)}</div>`);
             $card.append(`<div class="text-end mt-2"><button class="btn btn-sm btn-outline-danger remove-file" data-idx="${idx}">Remove</button></div>`);
@@ -220,71 +226,63 @@ $(function(){
     }
     function validateFileObj(file){
         const name = file.name || '';
-        const ext = (name.split('.').pop() || '').toLowerCase();
-        if (!ext || !ALLOWED_EXT.includes(ext)) {
-            return { ok: false, message: `File "${name}" not allowed. Allowed: ${ALLOWED_EXT.join(', ')}` };
+        const ext  = (name.split('.').pop() || '').toLowerCase();
+        if(!ALLOWED_EXT.includes(ext)){
+            return { ok:false, message:`File "${name}" not allowed.` };
         }
-        if (file.size > MAX_BYTES) {
-            return { ok: false, message: `File "${name}" is too large. Max ${MAX_BYTES/1024/1024} MB.` };
+        if(file.size > MAX_BYTES){
+            return { ok:false, message:`File "${name}" is too large.` };
         }
-        return { ok: true };
+        return { ok:true };
     }
     function addFilesFromList(fileList){
         const invalid = [];
         Array.from(fileList).forEach(f=>{
             const v = validateFileObj(f);
-            if (v.ok){
+            if(v.ok){
                 const duplicate = selectedFiles.some(sf => sf.name === f.name && sf.size === f.size);
-                if (!duplicate) selectedFiles.push(f);
+                if(!duplicate) selectedFiles.push(f);
             } else {
                 invalid.push(v.message);
             }
         });
         renderFiles();
-        if (invalid.length){
-            $('#fileError').html(invalid.join('<br/>'));
-        } else {
-            $('#fileError').text('');
-        }
+        $('#fileError').html(invalid.join('<br>'));
     }
     $('#dropArea').on('click', ()=> $('#fileInput').trigger('click'));
-    $('#browseFileLink').on('click', function(e){ e.preventDefault(); $('#fileInput').trigger('click'); });
+    $('#browseFileLink').on('click', e=>{ e.preventDefault(); $('#fileInput').trigger('click'); });
     $('#fileInput').on('change', function(){
-        const files = this.files || [];
-        if (files.length) addFilesFromList(files);
+        if(this.files?.length) addFilesFromList(this.files);
         $(this).val('');
     });
-    $('#dropArea').on('dragover', e => { e.preventDefault(); $('#dropArea').addClass('border-primary'); });
-    $('#dropArea').on('dragleave', e => { e.preventDefault(); $('#dropArea').removeClass('border-primary'); });
-    $('#dropArea').on('drop', function(e){
+    $('#dropArea').on('dragover', e=>{ e.preventDefault(); $('#dropArea').addClass('border-primary'); });
+    $('#dropArea').on('dragleave', e=>{ e.preventDefault(); $('#dropArea').removeClass('border-primary'); });
+    $('#dropArea').on('drop', e=>{
         e.preventDefault(); $('#dropArea').removeClass('border-primary');
         const files = e.originalEvent?.dataTransfer?.files || [];
-        if (files.length) addFilesFromList(files);
+        if(files.length) addFilesFromList(files);
     });
     $('#filesPreview').on('click', '.remove-file', function(){
-        const idx = Number($(this).data('idx'));
-        selectedFiles.splice(idx,1);
+        selectedFiles.splice(Number($(this).data('idx')),1);
         renderFiles();
     });
 
-    // -------- External modal ----------
-    const extModalEl = document.getElementById('externalModal');
-    const extModal = extModalEl ? new bootstrap.Modal(extModalEl, {}) : null;
-    $('#openExternalModal').on('click', ()=> {
-        if (extModal) extModal.show();
-        renderExternalList();
-    });
-    $('#closeExternalModal').on('click', ()=> { if (extModal) extModal.hide(); });
+    // ----- external modal -----
+    const extModal = new bootstrap.Modal(document.getElementById('externalModal'));
+    $('#openExternalModal').on('click', ()=>{ renderExternalList(); extModal.show(); });
+    $('#closeExternalModal').on('click', ()=> extModal.hide());
 
     function renderExternalList(){
         const $l = $('#externalList').empty();
         if(!externalUsers.length) return $l.html('<div class="text-muted">No external users</div>');
-        externalUsers.forEach((u, idx)=> $l.append(
-          `<div class="d-flex justify-content-between border p-1 mb-1 align-items-center">
-             <div><strong>${escapeHtml(u.name)}</strong><div class="small text-muted">${escapeHtml(u.email)}</div></div>
-             <button data-idx="${idx}" class="btn btn-sm btn-link rm-ext">Remove</button>
-           </div>`
-        ));
+        externalUsers.forEach((u, idx)=>{
+            $l.append(
+                `<div class="d-flex justify-content-between border p-1 mb-1 align-items-center">
+                    <div><strong>${escapeHtml(u.name)}</strong><div class="small text-muted">${escapeHtml(u.email)}</div></div>
+                    <button data-idx="${idx}" class="btn btn-sm btn-link rm-ext">Remove</button>
+                 </div>`
+            );
+        });
     }
     $('#externalList').on('click', '.rm-ext', function(){
         externalUsers.splice(Number($(this).data('idx')),1);
@@ -293,99 +291,298 @@ $(function(){
     });
     $('#addExternalBtn').on('click', function(e){
         e.preventDefault();
-        const n = $('#externalName').val().trim();
+        const n  = $('#externalName').val().trim();
         const em = $('#externalEmail').val().trim();
         if(!n || !em){ alert('Name and Email required'); return; }
         if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ alert('Invalid email'); return; }
-        if(!externalUsers.find(x=>x.email.toLowerCase() === em.toLowerCase())) externalUsers.push({name:n, email:em});
+        if(!externalUsers.find(x=>x.email.toLowerCase() === em.toLowerCase())){
+            externalUsers.push({name:n, email:em});
+        }
         $('#externalName,#externalEmail').val('');
         renderExternalList();
         renderSelectedPreview();
     });
 
-    // -------- Selected preview (WITH Internal/External badges) ----------
+    // ----- selected preview -----
     function renderSelectedPreview(){
         const $c = $('#selectedPreview').empty();
         const combined = [
-          ...finalSelectedUsers.map(u => ({...u, __type:'internal'})),
-          ...externalUsers.map(u => ({...u, id:null, __type:'external'}))
+            ...finalSelectedUsers.map(u=>({...u,__type:'internal'})),
+            ...externalUsers.map(u=>({...u,id:null,__type:'external'})),
         ];
         if(!combined.length) return $c.html('<div class="text-muted">No recipients selected</div>');
         combined.forEach(u=>{
             const isInternal = u.__type === 'internal';
             const badge = isInternal
-              ? '<span class="badge bg-success ms-2">Internal</span>'
-              : '<span class="badge bg-secondary ms-2">External</span>';
+                ? '<span class="badge bg-success ms-2">Internal</span>'
+                : '<span class="badge bg-secondary ms-2">External</span>';
             const dataAttr = isInternal
-              ? `data-int-id="${u.id}"`
-              : `data-ext-email="${escapeHtml(u.email || '')}"`;
-
+                ? `data-int-id="${u.id}"`
+                : `data-ext-email="${escapeHtml(u.email || '')}"`;
             $c.append(
-              `<div class="d-flex justify-content-between border-bottom py-1 align-items-center mb-1">
-                 <div>
-                   <strong>${escapeHtml(u.name || '')}</strong> ${badge}
-                   <div class="small text-muted">${escapeHtml(u.email || '')}</div>
-                 </div>
-                 <div><button class="btn btn-sm btn-link remove-rec" ${dataAttr}>Remove</button></div>
-               </div>`
+                `<div class="d-flex justify-content-between border-bottom py-1 align-items-center mb-1">
+                    <div>
+                      <strong>${escapeHtml(u.name || '')}</strong> ${badge}
+                      <div class="small text-muted">${escapeHtml(u.email || '')}</div>
+                    </div>
+                    <div><button class="btn btn-sm btn-link remove-rec" ${dataAttr}>Remove</button></div>
+                 </div>`
             );
         });
     }
     $('#selectedPreview').on('click', '.remove-rec', function(){
-        const p = $(this).closest('[data-int-id],[data-ext-email]');
-        if(p.attr('data-int-id')){
-            const uid = Number(p.attr('data-int-id'));
+        const intId   = $(this).attr('data-int-id');
+        const extMail = $(this).attr('data-ext-email');
+        if(intId){
+            const uid = Number(intId);
             finalSelectedUsers = finalSelectedUsers.filter(u=>u.id !== uid);
             $('#departmentUsers').find(`input.dept-user-checkbox[data-id="${uid}"]`).prop('checked', false);
-        } else if(p.attr('data-ext-email')){
-            const e = p.attr('data-ext-email');
-            externalUsers = externalUsers.filter(u=>u.email !== e);
+        } else if(extMail){
+            externalUsers = externalUsers.filter(u=>u.email !== extMail);
             renderExternalList();
         }
         renderSelectedPreview();
     });
 
-    // -------- Init (departments + notice data) ----------
-    function init(){
+    // ----- departments -----
+    function loadDepartments(){
         $.get(`${API}/departments-data`).done(res=>{
-            const depts = res.data || res;
-            $('#departmentsList').empty();
-            depts.forEach(d=> $('#departmentsList').append(
-              `<div class="mb-1">
-                 <input class="dept-checkbox me-2" type="checkbox" value="${d.id}" id="dept_${d.id}">
-                 <label for="dept_${d.id}">${escapeHtml(d.name)}</label>
-               </div>`
-            ));
+            departments = res.data || res || [];
+            const $box = $('#departmentsList').empty();
+            if(!departments.length){
+                $box.html('<div class="text-muted">No departments found</div>');
+                return;
+            }
+            departments.forEach(d=>{
+                $box.append(
+                    `<div class="mb-1">
+                        <input class="dept-checkbox me-2" type="checkbox" value="${d.id}" id="dept_${d.id}">
+                        <label for="dept_${d.id}">${escapeHtml(d.name)}</label>
+                     </div>`
+                );
+            });
+            syncDeptMaster();
         }).fail(()=> $('#departmentsList').html('<div class="text-muted">Failed to load departments</div>'));
+    }
 
+    $('#departmentsList').on('change', '.dept-checkbox', function(){
+        const depId = Number(this.value);
+        if(this.checked){
+            if(!selectedDepartments.includes(depId)) selectedDepartments.push(depId);
+            fetchDepartmentUsers(depId, true);
+        } else {
+            selectedDepartments = selectedDepartments.filter(x=>x!==depId);
+            delete departmentUsers[depId];
+            renderDepartmentUsers();
+        }
+        syncDeptMaster();
+    });
+
+    // master dept select
+    $('#deptAll').on('change', function(){
+        const checked = $(this).is(':checked');
+        $('#departmentsList .dept-checkbox').prop('checked', checked);
+        if(checked){
+            selectedDepartments = departments.map(d=>Number(d.id));
+            const tasks = selectedDepartments.map(id=>{
+                if(departmentUsers[id]) return Promise.resolve();
+                return fetchDepartmentUsers(id, false);
+            });
+            Promise.all(tasks).then(()=>{
+                renderDepartmentUsers();
+            });
+        } else {
+            selectedDepartments = [];
+            departmentUsers = {};
+            renderDepartmentUsers();
+        }
+    });
+
+    function syncDeptMaster(){
+        const allSelected = departments.length && selectedDepartments.length === departments.length;
+        $('#deptAll').prop('checked', allSelected);
+    }
+
+    function fetchDepartmentUsers(depId, markChecked){
+        if(departmentUsers[depId]){
+            renderDepartmentUsers();
+            if(markChecked) markUsersFromFinal();
+            return;
+        }
+        $.get(`${API}/notices/department-users/${depId}`).done(res=>{
+            departmentUsers[depId] = res.data || res || [];
+            renderDepartmentUsers();
+            if(markChecked) markUsersFromFinal();
+        }).fail(()=>{
+            departmentUsers[depId] = [];
+            renderDepartmentUsers();
+        });
+    }
+
+    function renderDepartmentUsers(){
+        const $box = $('#departmentUsers').empty();
+
+        if (!selectedDepartments.length) {
+            $box.html('<small class="text-muted">Choose departments</small>');
+            $('#depUsersAll').prop('checked', false);
+            return;
+        }
+
+        const all = [].concat(...selectedDepartments.map(id => departmentUsers[id] || []));
+        const unique = [];
+        const seen = {};
+        all.forEach(u => {
+            if (u && u.id != null && !seen[u.id]) {
+                seen[u.id] = true;
+                unique.push(u);
+            }
+        });
+
+        if (!unique.length) {
+            $box.html('<small class="text-muted">No users</small>');
+            $('#depUsersAll').prop('checked', false);
+            return;
+        }
+
+        // check if all are selected
+        const allSelected = unique.every(u => finalSelectedUsers.some(x => x.id === u.id));
+        $('#depUsersAll').prop('checked', allSelected);
+
+        unique.forEach(u => {
+            const checked = finalSelectedUsers.some(x => x.id === u.id) ? 'checked' : '';
+            const name = escapeHtml(u.name || 'User');
+            const email = escapeHtml(u.email || '');
+            $box.append(`
+            <label class="form-check d-block mb-1">
+                <input class="form-check-input me-2 dept-user-checkbox"
+                    type="checkbox"
+                    data-id="${u.id}"
+                    data-name="${name}"
+                    data-email="${email}"
+                    ${checked}>
+                <span class="form-check-label">
+                <strong>${name}</strong>
+                <small class="text-muted">(${email || 'no email'})</small>
+                </span>
+            </label>
+            `);
+        });
+    }
+
+    $('#depUsersAll').on('change', function () {
+        const checked = this.checked;
+        $('#departmentUsers .dept-user-checkbox').each(function () {
+            $(this).prop('checked', checked);
+            const id = Number($(this).data('id'));
+            const name = $(this).data('name');
+            const email = $(this).data('email');
+
+            if (checked) {
+                if (!finalSelectedUsers.find(x => x.id === id)) {
+                    finalSelectedUsers.push({ id, name, email });
+                }
+            } else {
+                finalSelectedUsers = finalSelectedUsers.filter(x => x.id !== id);
+            }
+        });
+        renderSelectedPreview();
+    });
+
+
+
+    function markUsersFromFinal(){
+        $('#departmentUsers .dept-user-checkbox').each(function(){
+            const id = Number($(this).data('id'));
+            const exists = finalSelectedUsers.some(u=>u.id === id);
+            $(this).prop('checked', exists);
+        });
+        const allChecks = $('#departmentUsers .dept-user-checkbox');
+        if(allChecks.length){
+            const allOn = allChecks.filter(':checked').length === allChecks.length;
+            $('#selectAllDep').prop('checked', allOn);
+        }
+    }
+
+    // select all department users
+    $('#departmentUsers').on('change', '#selectAllDep', function(){
+        const checked = this.checked;
+        $('#departmentUsers .dept-user-checkbox').each(function(){
+            $(this).prop('checked', checked);
+            const id = Number($(this).data('id'));
+            const name = $(this).data('name');
+            const email = $(this).data('email');
+            if(checked){
+                if(!finalSelectedUsers.find(x=>x.id === id)){
+                    finalSelectedUsers.push({id, name, email});
+                }
+            } else {
+                finalSelectedUsers = finalSelectedUsers.filter(x=>x.id !== id);
+            }
+        });
+        renderSelectedPreview();
+    });
+
+    // single user
+    $('#departmentUsers').on('change', '.dept-user-checkbox', function () {
+        const id = Number($(this).data('id'));
+        const name = $(this).data('name');
+        const email = $(this).data('email');
+
+        if (this.checked) {
+            if (!finalSelectedUsers.find(x => x.id === id)) {
+                finalSelectedUsers.push({ id, name, email });
+            }
+        } else {
+            finalSelectedUsers = finalSelectedUsers.filter(x => x.id !== id);
+        }
+
+        // re-check master
+        const total = $('#departmentUsers .dept-user-checkbox').length;
+        const checkedCount = $('#departmentUsers .dept-user-checkbox:checked').length;
+        $('#depUsersAll').prop('checked', total > 0 && total === checkedCount);
+
+        renderSelectedPreview();
+    });
+
+
+    // ----- init -----
+    function init(){
+        loadDepartments();
         $.get(`${API}/notices/${id}`).done(res=>{
             const it = res.data || res;
             $('#title').val(it.title || '');
             quill.root.innerHTML = it.description || '';
 
             const propagations = it.propagations || [];
-            const internal = propagations.filter(p=>p.user_id !== null);
-            const externalBack = propagations.filter(p=>p.user_id === null);
+            const internal  = propagations.filter(p=>p.user_id !== null);
+            const externalB = propagations.filter(p=>p.user_id === null);
 
             finalSelectedUsers = internal.map(p=>({
-              id: p.user?.id || p.user_id,
-              name: p.user?.name || p.name || '',
-              email: p.user?.email || p.user_email || ''
+                id: p.user?.id || p.user_id,
+                name: p.user?.name || p.name || '',
+                email: p.user?.email || p.user_email || ''
             }));
-            externalUsers = externalBack.map(p=>({ name: p.name || p.user?.name || '', email: p.user_email || '' }));
+            externalUsers = externalB.map(p=>({
+                name: p.name || p.user?.name || '',
+                email: p.user_email || p.email || ''
+            }));
 
-            if (Array.isArray(it.departments)) {
-                selectedDepartments = it.departments.map(d=>d.id);
-                setTimeout(()=> {
-                    selectedDepartments.forEach(depId => $(`#dept_${depId}`).prop('checked', true));
-                    selectedDepartments.forEach(depId => fetchDepartmentUsers(depId, true));
-                }, 250);
-            }
+            // preselect depts (after they load)
+            const noticeDeptIds = Array.isArray(it.departments) ? it.departments.map(d=>Number(d.id)) : [];
+            // wait a bit for departments to be rendered
+            setTimeout(()=>{
+                noticeDeptIds.forEach(depId=>{
+                    $(`#dept_${depId}`).prop('checked', true);
+                    if(!selectedDepartments.includes(depId)) selectedDepartments.push(depId);
+                    fetchDepartmentUsers(depId, true);
+                });
+                syncDeptMaster();
+            }, 400);
 
             const attachments = it.attachments || it.attach || [];
-            const normalized = attachments.map(a => ({
+            const normalized  = attachments.map(a => ({
                 file_name: a.file_name || a.name || a.filename,
-                file_url: a.file_url || a.url || a.file_path || null
+                file_url:  a.file_url  || a.url  || a.file_path || null
             }));
             renderPreviousAttachments(normalized);
 
@@ -395,114 +592,21 @@ $(function(){
     }
     init();
 
-    // -------- Departments & Users ----------
-    $('#departmentsList').on('change', '.dept-checkbox', function(){
-        const depId = Number(this.value);
-        if(this.checked){
-            if (!selectedDepartments.includes(depId)) selectedDepartments.push(depId);
-            fetchDepartmentUsers(depId, true);
-        } else {
-            selectedDepartments = selectedDepartments.filter(x=>x!==depId);
-            delete departmentUsers[depId];
-            renderDepartmentUsers();
-        }
-    });
-
-    function fetchDepartmentUsers(depId, markAsChecked = false){
-        if(departmentUsers[depId]){
-            renderDepartmentUsers();
-            if(markAsChecked) markUsersFromFinal();
-            return;
-        }
-        $.get(`${API}/notices/department-users/${depId}`).done(res=>{
-            departmentUsers[depId] = res.data || res || [];
-            renderDepartmentUsers();
-            if(markAsChecked) markUsersFromFinal();
-        }).fail(()=> {
-            departmentUsers[depId] = [];
-            renderDepartmentUsers();
-        });
-    }
-
-    // UPDATED: show user name WITH email in the list
-    function renderDepartmentUsers(){
-        const $box = $('#departmentUsers').empty();
-        if(selectedDepartments.length===0){
-            $box.html('<small class="text-muted">Choose departments</small>');
-            return;
-        }
-        const all = [].concat(...selectedDepartments.map(id=> departmentUsers[id] || []));
-        const unique = []; const map = {};
-        all.forEach(u=>{ if(u && u.id != null && !map[u.id]){ map[u.id]=true; unique.push(u); } });
-        if(!unique.length) return $box.html('<small class="text-muted">No users</small>');
-
-        const allIds = unique.map(u=>u.id);
-        const allSelected = allIds.every(id=> finalSelectedUsers.some(s=>s.id === id));
-        $box.append(
-          `<div class="mb-2">
-             <input type="checkbox" id="selectAllDep" ${allSelected ? 'checked' : ''}/>
-             <label for="selectAllDep">Select all</label>
-           </div>`
-        );
-
-        unique.forEach(u=>{
-            const checked = finalSelectedUsers.some(x=>x.id===u.id) ? 'checked' : '';
-            const name = escapeHtml(u.name || 'User');
-            const email = escapeHtml(u.email || '');
-            $box.append(
-              `<label class="form-check d-block mb-1">
-                 <input class="form-check-input me-2 dept-user-checkbox"
-                        type="checkbox" ${checked}
-                        data-id="${u.id}" data-name="${name}" data-email="${email}">
-                 <span class="form-check-label">
-                   <strong>${name}</strong>
-                   <small class="text-muted">(${email || 'no email'})</small>
-                 </span>
-               </label>`
-            );
-        });
-    }
-
-    function markUsersFromFinal(){
-        $('#departmentUsers .dept-user-checkbox').each(function(){
-            const id = Number($(this).data('id'));
-            const exists = finalSelectedUsers.some(u=>u.id === id);
-            $(this).prop('checked', !!exists);
-        });
-    }
-
-    $('#departmentUsers').on('change', '#selectAllDep', function(){
-        const checked = this.checked;
-        $('#departmentUsers .dept-user-checkbox').each(function(){
-            $(this).prop('checked', checked);
-            const id = Number($(this).data('id'));
-            const name = $(this).data('name');
-            const email = $(this).data('email');
-            if (checked) { if (!finalSelectedUsers.find(x=>x.id===id)) finalSelectedUsers.push({id, name, email}); }
-            else finalSelectedUsers = finalSelectedUsers.filter(x=>x.id!==id);
-        });
-        renderSelectedPreview();
-    });
-    $('#departmentUsers').on('change', '.dept-user-checkbox', function(){
-        const id = Number($(this).data('id'));
-        const name = $(this).data('name');
-        const email = $(this).data('email');
-        if(this.checked){ if(!finalSelectedUsers.find(x=>x.id===id)) finalSelectedUsers.push({id, name, email}); }
-        else finalSelectedUsers = finalSelectedUsers.filter(x=>x.id !== id);
-        renderSelectedPreview();
-    });
-
-    // -------- Submit (Update) ----------
+    // ----- submit -----
     $('#saveDraft').on('click', function(){
-        const title = $('#title').val().trim();
+        const title       = $('#title').val().trim();
         const description = quill.root.innerHTML;
+
         const fd = new FormData();
         fd.append('title', title);
         fd.append('description', description);
 
         selectedDepartments.forEach((d,i)=> fd.append(`departments[${i}]`, d));
-        finalSelectedUsers.forEach((u,i)=> { if(u.id) fd.append(`internal_users[${i}]`, u.id); });
-        externalUsers.forEach((u,i)=> { fd.append(`external_users[${i}][name]`, u.name); fd.append(`external_users[${i}][email]`, u.email); });
+        finalSelectedUsers.forEach((u,i)=> fd.append(`internal_users[${i}]`, u.id));
+        externalUsers.forEach((u,i)=>{
+            fd.append(`external_users[${i}][name]`, u.name);
+            fd.append(`external_users[${i}][email]`, u.email);
+        });
         selectedFiles.forEach((f,i)=> fd.append(`attachments[${i}]`, f));
 
         $('#saveDraft').prop('disabled', true).text('Updating...');
@@ -512,9 +616,9 @@ $(function(){
             data: fd,
             processData: false,
             contentType: false,
-        }).done(()=> {
+        }).done(()=>{
             $('#alertBox').html('<div class="alert alert-success">Updated</div>');
-            setTimeout(()=> window.location.href='/view-notices',1000);
+            setTimeout(()=> window.location.href='/view-notices', 1000);
         }).fail(xhr=>{
             if(xhr.status === 422){
                 const e = xhr.responseJSON.errors || {};
@@ -524,7 +628,7 @@ $(function(){
             } else {
                 $('#alertBox').html('<div class="alert alert-danger">Failed to update notice</div>');
             }
-        }).always(()=> {
+        }).always(()=>{
             $('#saveDraft').prop('disabled', false).text('Update (Save as Draft)');
         });
     });
