@@ -71,7 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('profile/password', [UserController::class, 'changePassword'])->name('profile.password.change');
 
     // for notice
-    Route::middleware(['role:Admin'])->group(function () {
+    Route::middleware(['role:Admin|User'])->group(function () {
         Route::apiResource('notices', NoticeController::class);
         Route::post('notices-update/{id}', [NoticeController::class, 'updateNotice'])->name('notices.update');
         Route::post('notices/draft', [NoticeController::class, 'draftNotices'])->name('notices.draft');
@@ -84,6 +84,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // notice search
         Route::get('notices-search', [NoticeController::class, 'noticeSearch'])->name('notices.search');
+
+Route::middleware(['role:Admin'])->group(function () {
 
         // for meeting
         Route::apiResource('meetings', MeetingController::class);
@@ -112,6 +114,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/meetings/conflicts/user', [MeetingAvailabilityController::class, 'checkUser'])->name('meetings.conflicts.user');
     });
+});
+
 });
 
 // dashboard routes

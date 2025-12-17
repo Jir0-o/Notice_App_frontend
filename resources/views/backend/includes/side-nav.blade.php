@@ -71,7 +71,7 @@
       </a>
     </li>
 
-    <li class="menu-item menu-by-role" data-role="Admin" id="menu-notices-admin" style="display:none;">
+    <li class="menu-item menu-by-role" data-role="Admin , User" id="menu-notices-admin" style="display:none;">
       <a href="{{ route('notices.index') }}" class="menu-link">
         <i class="menu-icon tf-icons bx bx-bell"></i>
         <div data-i18n="Notices">Upload Notice</div>
