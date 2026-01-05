@@ -43,6 +43,14 @@ class SendMeetingReminderJob implements ShouldQueue
             $recipientName = $prop->user_name
                 ?: ($prop->user?->name ?? 'Participant');
 
+            if ($prop->user && $prop->user->fcm_token) {
+                $this->sendFcmNotification(
+                    $prop->user->fcm_token,
+                    'Meeting in 30 minutes',
+                    $detail->title
+                );
+            }
+
             try {
                 // email
                 Mail::raw(
