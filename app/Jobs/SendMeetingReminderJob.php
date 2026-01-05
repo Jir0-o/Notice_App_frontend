@@ -74,8 +74,6 @@ class SendMeetingReminderJob implements ShouldQueue
     {
         if (!$token) return;
 
-        Log::info($token);
-
         $accessToken = $this->getFcmAccessToken();
         $projectId   = 'sicip-push-notification';
         $url         = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
@@ -93,6 +91,9 @@ class SendMeetingReminderJob implements ShouldQueue
                 ],
             ],
         ];
+
+        Log::info($message);
+
 
         Http::withToken($accessToken)->post($url, $message);
     }
