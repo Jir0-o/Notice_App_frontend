@@ -67,4 +67,4 @@ Route::resource('users', UserController::class);
 
 Route::get('time', function() {
     return Carbon::now();
-})
+});
