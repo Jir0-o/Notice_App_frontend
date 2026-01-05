@@ -29,6 +29,7 @@ class SendMeetingReminders extends Command
             ])
             ->withCount('propagations')
             ->get();
+        Log::info($due);
 
         foreach ($due as $detail) {
             dispatch(new SendMeetingReminderJob($detail->id));
