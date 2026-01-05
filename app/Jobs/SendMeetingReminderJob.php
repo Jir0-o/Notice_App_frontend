@@ -36,7 +36,7 @@ class SendMeetingReminderJob implements ShouldQueue
         $props = $detail->propagations;
         foreach ($props as $prop) {
             Log::info($prop);
-            
+
             $email = $prop->user_email;
             if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 continue;
@@ -45,16 +45,16 @@ class SendMeetingReminderJob implements ShouldQueue
             $recipientName = $prop->user_name
                 ?: ($prop->user?->name ?? 'Participant');
 
-            if ($prop->user && $prop->user->fcm_token) {
-                Log::info('Sending push notification');
-                $this->sendFcmNotification(
-                    $prop->user->fcm_token,
-                    'Meeting in 30 minutes',
-                    $detail->title
-                );
-            }
-
             try {
+                  // push
+                if ($prop->user && $prop->user->fcm_token) {
+                    $this->sendFcmNotification(
+                        $prop->user->fcm_token,
+                        'Meeting in 30 minutes',
+                        $detail->title
+                    );
+                }
+
                 // email
                 Mail::raw(
                     "Reminder: '{$detail->title}' at {$detail->start_time->format('H:i')} on {$detail->date->toDateString()}",
@@ -64,14 +64,7 @@ class SendMeetingReminderJob implements ShouldQueue
                     }
                 );
 
-                // push
-                if ($prop->user && $prop->user->fcm_token) {
-                    $this->sendFcmNotification(
-                        $prop->user->fcm_token,
-                        'Meeting in 30 minutes',
-                        $detail->title
-                    );
-                }
+              
 
             } catch (\Throwable $e) {
                 Log::error("Reminder send failed to {$email}: ".$e->getMessage());
@@ -79,18 +72,11 @@ class SendMeetingReminderJob implements ShouldQueue
         }
     }
 
-    private function getFcmAccessToken()
-    {
-        $client = new GoogleClient();
-        $client->setAuthConfig(env('FIREBASE_CREDENTIALS'));
-        $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
-        $token = $client->fetchAccessTokenWithAssertion();
-        return $token['access_token'];
-    }
-
     private function sendFcmNotification($token, $title, $body)
     {
         if (!$token) return;
+
+        Log::info($token);
 
         $accessToken = $this->getFcmAccessToken();
         $projectId   = 'sicip-push-notification';
@@ -111,5 +97,14 @@ class SendMeetingReminderJob implements ShouldQueue
         ];
 
         Http::withToken($accessToken)->post($url, $message);
+    }
+
+    private function getFcmAccessToken()
+    {
+        $client = new GoogleClient();
+        $client->setAuthConfig(env('FIREBASE_CREDENTIALS'));
+        $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+        $token = $client->fetchAccessTokenWithAssertion();
+        return $token['access_token'];
     }
 }
