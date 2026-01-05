@@ -5,6 +5,8 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Carbon\Carbon;
+use App\Models\MeetingDetail;
+
 
 // Home Route
 Route::get('/', function () {
@@ -66,5 +68,18 @@ Route::resource('users', UserController::class);
 });
 
 Route::get('time', function() {
-   dd(now('Asia/Dhaka')->toDateTimeString());
+  $now  = Carbon::now();
+        $from = $now->copy()->addMinutes(29);
+        $to   = $now->copy()->addMinutes(31);
+
+        $due = MeetingDetail::query()
+            ->whereDate('date', $now->toDateString())
+            ->whereBetween('start_time', [
+                $from->format('H:i:00'),
+                $to->format('H:i:59'),
+            ])
+            ->withCount('propagations')
+            ->get();
+
+            dd($due);
 });
