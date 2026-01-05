@@ -54,13 +54,13 @@ class SendMeetingReminderJob implements ShouldQueue
                 }
 
                 // email
-                // Mail::raw(
-                //     "Reminder: '{$detail->title}' at {$detail->start_time->format('H:i')} on {$detail->date->toDateString()}",
-                //     function ($msg) use ($email, $recipientName, $detail) {
-                //         $msg->to($email, $recipientName)
-                //             ->subject('Meeting Reminder: '.$detail->title);
-                //     }
-                // );
+                Mail::raw(
+                    "Reminder: '{$detail->title}' at {$detail->start_time->format('H:i')} on {$detail->date->toDateString()}",
+                    function ($msg) use ($email, $recipientName, $detail) {
+                        $msg->to($email, $recipientName)
+                            ->subject('Meeting Reminder: '.$detail->title);
+                    }
+                );
 
               
 
