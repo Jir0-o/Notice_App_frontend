@@ -102,11 +102,16 @@ class SendMeetingReminderJob implements ShouldQueue
 
     private function getFcmAccessToken()
     {
-        $client = new GoogleClient();
-        $client->setAuthConfig(env('FIREBASE_CREDENTIALS'));
-        $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+        try {
+            $client = new GoogleClient();
+            $client->setAuthConfig(env('FIREBASE_CREDENTIALS'));
+            $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
 
-        $accessToken = $client->fetchAccessTokenWithAssertion();
-        return $accessToken['access_token'];
+            $accessToken = $client->fetchAccessTokenWithAssertion();
+            return $accessToken['access_token'];
+        } catch (\Throwable $e) {
+            Log::error($e->getMessage());
+        }
+       
     }
 }
