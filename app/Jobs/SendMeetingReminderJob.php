@@ -105,7 +105,8 @@ class SendMeetingReminderJob implements ShouldQueue
         $client = new GoogleClient();
         $client->setAuthConfig(env('FIREBASE_CREDENTIALS'));
         $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
-        $token = $client->fetchAccessTokenWithAssertion();
-        return $token['access_token'];
+
+        $accessToken = $client->fetchAccessTokenWithAssertion();
+        return $accessToken['access_token'];
     }
 }
