@@ -15,20 +15,15 @@ class SendMeetingReminders extends Command
 
     public function handle(): int
     {
-         $now = Carbon::now('Asia/Dhaka');
-        $from = $now->copy()->addMinutes(29);
-        $to   = $now->copy()->addMinutes(31);
-
-        Log::info('called');
-
+        $now = Carbon::now('Asia/Dhaka');
         $due = MeetingDetail::query()
             ->whereDate('date', $now->toDateString())
             ->whereBetween('start_time', [
-                $from->format('H:i:00'),
-                $to->format('H:i:59'),
+                $now->copy()->subMinute()->format('H:i:s'),
+                $now->copy()->addMinute()->format('H:i:s'),
             ])
-            ->withCount('propagations')
             ->get();
+            
         Log::info($due);
 
         foreach ($due as $detail) {
