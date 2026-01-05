@@ -69,7 +69,7 @@ Route::resource('users', UserController::class);
 
 Route::get('time', function() {
     $now = Carbon::now('Asia/Dhaka');
-    $due = MeetingDetail::whereBetween('start_at', [
+    $due = MeetingDetail::whereBetween('start_time', [
         now('Asia/Dhaka')->addMinutes(29),
         now('Asia/Dhaka')->addMinutes(31),
     ])->get();
