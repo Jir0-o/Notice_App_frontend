@@ -69,10 +69,17 @@ Route::resource('users', UserController::class);
 
 Route::get('time', function() {
     $now = Carbon::now('Asia/Dhaka');
-    $due = MeetingDetail::whereBetween('start_time', [
-        now('Asia/Dhaka')->addMinutes(29),
-        now('Asia/Dhaka')->addMinutes(31),
-    ])->get();
+    $from = $now->copy()->addMinutes(29);
+    $to   = $now->copy()->addMinutes(31);
+   
+    $due = MeetingDetail::query()
+        ->whereDate('date', $now->toDateString())
+        ->whereBetween('start_time', [
+            $from->format('H:i:00'),
+            $to->format('H:i:59'),
+        ])
+        ->withCount('propagations')
+        ->get();
 
     dd($due);
 });
