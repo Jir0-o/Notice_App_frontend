@@ -14,7 +14,7 @@ class SendMeetingReminders extends Command
 
     public function handle(): int
     {
-        $now  = Carbon::now();
+         $now = Carbon::now('Asia/Dhaka');
         $from = $now->copy()->addMinutes(29);
         $to   = $now->copy()->addMinutes(31);
 
