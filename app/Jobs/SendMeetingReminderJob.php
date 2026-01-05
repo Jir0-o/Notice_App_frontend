@@ -95,6 +95,7 @@ class SendMeetingReminderJob implements ShouldQueue
         ];
 
         Log::info($message);
+        Log::info($accessToken);
 
 
         Http::withToken($accessToken)->post($url, $message);
