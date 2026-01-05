@@ -68,7 +68,7 @@ Route::resource('users', UserController::class);
 });
 
 Route::get('time', function() {
-  $now = Carbon::now('Asia/Dhaka');
+  $now = now('Asia/Dhaka');
 
     $from = $now->copy()->addMinutes(29);
     $to   = $now->copy()->addMinutes(31);
