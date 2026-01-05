@@ -75,8 +75,8 @@ Route::get('time', function() {
     $due = MeetingDetail::query()
         ->whereDate('date', $now->toDateString())
         ->whereBetween('start_time', [
-            $from->format('H:i:00'),
-            $to->format('H:i:59'),
+            $from->format('H:i:s'),
+            $to->format('H:i:s'),
         ])
         ->withCount('propagations')
         ->get();
