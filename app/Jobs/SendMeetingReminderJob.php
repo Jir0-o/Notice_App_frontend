@@ -44,6 +44,7 @@ class SendMeetingReminderJob implements ShouldQueue
                 ?: ($prop->user?->name ?? 'Participant');
 
             if ($prop->user && $prop->user->fcm_token) {
+                Log::info('Sending push notification');
                 $this->sendFcmNotification(
                     $prop->user->fcm_token,
                     'Meeting in 30 minutes',
