@@ -4,6 +4,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
+use Carbon\Carbon;
 
 // Home Route
 Route::get('/', function () {
@@ -63,3 +64,7 @@ Route::get('/dashboard', function () {
 Route::resource('users', UserController::class);
 
 });
+
+Route::get('time', function() {
+    return Carbon::now();
+})
