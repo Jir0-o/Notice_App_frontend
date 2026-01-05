@@ -35,8 +35,6 @@ class SendMeetingReminderJob implements ShouldQueue
         // avoid double reminder: you can add a flag column later
         $props = $detail->propagations;
         foreach ($props as $prop) {
-            Log::info($prop);
-
             $email = $prop->user_email;
             if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 continue;
