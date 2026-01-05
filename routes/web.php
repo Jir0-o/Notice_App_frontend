@@ -68,19 +68,15 @@ Route::resource('users', UserController::class);
 });
 
 Route::get('time', function() {
-  $now = now('Asia/Dhaka');
+  $now = Carbon::now('Asia/Dhaka');
 
     $from = $now->copy()->addMinutes(29);
     $to   = $now->copy()->addMinutes(31);
 
-    $due = MeetingDetail::query()
-        ->whereDate('date', $now->toDateString())
-        ->whereBetween('start_time', [
-            $from->format('H:i:s'),
-            $to->format('H:i:s'),
-        ])
-        ->withCount('propagations')
-        ->get();
-
-    dd($due);
+    dd([
+        'now'  => $now->toDateTimeString(),
+        'date' => $now->toDateString(),
+        'from' => $from->format('H:i:s'),
+        'to'   => $to->format('H:i:s'),
+    ]);
 });
