@@ -73,10 +73,14 @@ Route::get('time', function() {
     $from = $now->copy()->addMinutes(29);
     $to   = $now->copy()->addMinutes(31);
 
-    dd([
-        'now'  => $now->toDateTimeString(),
-        'date' => $now->toDateString(),
-        'from' => $from->format('H:i:s'),
-        'to'   => $to->format('H:i:s'),
-    ]);
+    $due = MeetingDetail::query()
+            ->whereDate('date', $now->toDateString())
+            ->whereBetween('start_time', [
+                $from->format('H:i:00'),
+                $to->format('H:i:59'),
+            ])
+            ->withCount('propagations')
+            ->get();
+
+    dd($due);
 });
