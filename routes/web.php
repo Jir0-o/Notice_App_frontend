@@ -66,3 +66,16 @@ Route::get('/dashboard', function () {
 Route::resource('users', UserController::class);
 
 });
+
+Route::get('time', function() {
+  $now = Carbon::now('Asia/Dhaka');
+    $due = MeetingDetail::query()
+        ->whereDate('date', $now->toDateString())
+        ->whereBetween('start_time', [
+            $now->copy()->subMinute()->format('H:i:s'),
+            $now->copy()->addMinute()->format('H:i:s'),
+        ])
+        ->get();
+
+    dd($due);
+});
