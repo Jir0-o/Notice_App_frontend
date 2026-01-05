@@ -6,6 +6,7 @@ use App\Jobs\SendMeetingReminderJob;
 use App\Models\MeetingDetail;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class SendMeetingReminders extends Command
 {
@@ -17,6 +18,8 @@ class SendMeetingReminders extends Command
          $now = Carbon::now('Asia/Dhaka');
         $from = $now->copy()->addMinutes(29);
         $to   = $now->copy()->addMinutes(31);
+
+        Log::info('called');
 
         $due = MeetingDetail::query()
             ->whereDate('date', $now->toDateString())
