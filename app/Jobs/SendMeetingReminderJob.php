@@ -86,8 +86,10 @@ class SendMeetingReminderJob implements ShouldQueue
                     'body'  => $body,
                 ],
                 'data' => [
-                    'type' => 'meeting_reminder',
-                    'meeting_detail_id' => $this->meetingDetailId,
+                    'payload' => json_encode([
+                        'screen' => 'home',
+                        'id' => $this->meetingDetailId,
+                    ]),
                 ],
             ],
         ];
