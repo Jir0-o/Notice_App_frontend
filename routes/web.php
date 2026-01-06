@@ -4,6 +4,9 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
+use Carbon\Carbon;
+use App\Models\MeetingDetail;
+
 
 // Home Route
 Route::get('/', function () {
@@ -63,4 +66,21 @@ Route::get('/dashboard', function () {
 // User Resource Controller
 Route::resource('users', UserController::class);
 
+});
+
+Route::get('time', function() {
+    $now = Carbon::now('Asia/Dhaka');
+    $from = $now->copy()->addMinutes(29);
+    $to   = $now->copy()->addMinutes(31);
+   
+    $due = MeetingDetail::query()
+        ->whereDate('date', $now->toDateString())
+        ->whereBetween('start_time', [
+            $from->format('H:i:s'),
+            $to->format('H:i:s'),
+        ])
+        ->withCount('propagations')
+        ->get();
+
+    dd($due);
 });

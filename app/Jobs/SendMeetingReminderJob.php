@@ -44,6 +44,15 @@ class SendMeetingReminderJob implements ShouldQueue
                 ?: ($prop->user?->name ?? 'Participant');
 
             try {
+                  // push
+                if ($prop->user && $prop->user->fcm_token) {
+                    $this->sendFcmNotification(
+                        $prop->user->fcm_token,
+                        'Meeting in 30 minutes',
+                        $detail->title
+                    );
+                }
+
                 // email
                 Mail::raw(
                     "Reminder: '{$detail->title}' at {$detail->start_time->format('H:i')} on {$detail->date->toDateString()}",
@@ -53,28 +62,12 @@ class SendMeetingReminderJob implements ShouldQueue
                     }
                 );
 
-                // push
-                if ($prop->user && $prop->user->fcm_token) {
-                    $this->sendFcmNotification(
-                        $prop->user->fcm_token,
-                        'Meeting in 30 minutes',
-                        $detail->title
-                    );
-                }
+              
 
             } catch (\Throwable $e) {
                 Log::error("Reminder send failed to {$email}: ".$e->getMessage());
             }
         }
-    }
-
-    private function getFcmAccessToken()
-    {
-        $client = new GoogleClient();
-        $client->setAuthConfig(env('FIREBASE_CREDENTIALS'));
-        $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
-        $token = $client->fetchAccessTokenWithAssertion();
-        return $token['access_token'];
     }
 
     private function sendFcmNotification($token, $title, $body)
@@ -93,12 +86,33 @@ class SendMeetingReminderJob implements ShouldQueue
                     'body'  => $body,
                 ],
                 'data' => [
-                    'type' => 'meeting_reminder',
-                    'meeting_detail_id' => $this->meetingDetailId,
+                    'payload' => json_encode([
+                        'screen' => 'home',
+                        'id' => $this->meetingDetailId,
+                    ]),
                 ],
             ],
         ];
 
+        Log::info($message);
+        Log::info($accessToken);
+
+
         Http::withToken($accessToken)->post($url, $message);
+    }
+
+    private function getFcmAccessToken()
+    {
+        try {
+            $client = new GoogleClient();
+            $client->setAuthConfig(env('FIREBASE_CREDENTIALS'));
+            $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+
+            $accessToken = $client->fetchAccessTokenWithAssertion();
+            return $accessToken['access_token'];
+        } catch (\Throwable $e) {
+            Log::error($e->getMessage());
+        }
+       
     }
 }
