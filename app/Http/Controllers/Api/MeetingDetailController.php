@@ -151,6 +151,37 @@ class MeetingDetailController extends Controller
 		]);
 	}
 
+	public function chairUsersSelect2(Request $request)
+	{
+		$q = trim((string) $request->query('q', ''));
+
+		$users = User::query()
+			->select('id', 'name', 'email', 'phone')
+			->where('is_active', 1)
+			->where('status', 'active')
+			->when($q !== '', function ($query) use ($q) {
+				$query->where(function ($x) use ($q) {
+					$x->where('name', 'like', "%{$q}%")
+					->orWhere('email', 'like', "%{$q}%")
+					->orWhere('phone', 'like', "%{$q}%");
+				});
+			})
+			->orderBy('name')
+			->get();
+
+		$results = $users->map(function ($u) {
+			$text = trim($u->name . ' (' . ($u->email ?? '') . ')');
+			if (!empty($u->phone)) $text .= ' - ' . $u->phone;
+
+			return [
+				'id'   => $u->id,
+				'text' => $text,
+			];
+		})->values();
+
+		return response()->json(['results' => $results]);
+	}
+
     /**
      * POST /v1/meetings/{meeting}/details
      * Optional nested "propagations" on create.
@@ -179,6 +210,7 @@ class MeetingDetailController extends Controller
 				// attachments (multiple)
 				'attachments'        => 'nullable|array',
 				'attachments.*'      => 'file|max:10240', // 10MB each, adjust
+				'meeting_chair_id' => 'nullable|integer|exists:users,id',
 			]);
 
 			$meetingId = (int) $request->input('meeting_id');
@@ -199,8 +231,16 @@ class MeetingDetailController extends Controller
 			$endTime   = $request->input('end_time');
 
 			// 2) resolve attendees
+			$chairId = $request->filled('meeting_chair_id')
+				? (int) $request->input('meeting_chair_id')
+				: null;
+
 			$internalIds = collect($request->input('internal_users', []))
-				->filter()->map(fn($v) => (int)$v)->unique()->values();
+				->filter()
+				->map(fn($v) => (int) $v)
+				->when($chairId, fn($c) => $c->push($chairId)) 
+				->unique()
+				->values();
 
 			$internalUsers = $internalIds->isNotEmpty()
 				? User::whereIn('id', $internalIds)->get(['id','email'])
@@ -300,6 +340,7 @@ class MeetingDetailController extends Controller
 			// 4) create meeting detail with agenda
 			$detail = MeetingDetail::create([
 				'meeting_id' => $meetingId,
+				'meeting_chair_id' => $chairId,
 				'title'      => $request->input('title'),
 				'date'       => $date,
 				'start_time' => $startTime,
@@ -446,10 +487,20 @@ class MeetingDetailController extends Controller
 				'external_users.*.name'  => 'required_with:external_users|string|max:255',
 				'attachments'            => 'nullable|array',
 				'attachments.*'          => 'file|max:10240',
+				'meeting_chair_id' => 'nullable|integer|exists:users,id',
 			]);
 
 			// 2) load current detail + current attendees
 			$detail = MeetingDetail::with(['propagations', 'meetingAttachments'])->findOrFail($id);
+
+			$chairId = $detail->meeting_chair_id; 
+
+			if ($request->has('meeting_chair_id')) {
+				// allow clearing
+				$chairId = $request->filled('meeting_chair_id')
+					? (int) $request->input('meeting_chair_id')
+					: null;
+			}
 
 			// 3) figure out target meeting + window
 			$targetMeetingId = (int) $request->input('meeting_id', $detail->meeting_id);
@@ -491,6 +542,11 @@ class MeetingDetailController extends Controller
 					->unique()
 					->values()
 				: $existingInternalIds;
+			
+			if (!empty($chairId)) {
+				$internalIds = collect($internalIds)->push((int)$chairId)->unique()->values();
+				$internalUsers = User::whereIn('id', $internalIds)->get(['id','email']);
+			}
 
 			$internalUsers = $internalIds->isNotEmpty()
 				? User::whereIn('id', $internalIds)->get(['id','email'])
@@ -620,6 +676,7 @@ class MeetingDetailController extends Controller
 			// 8) update main detail
 			$detail->update([
 				'meeting_id' => $targetMeetingId,
+				'meeting_chair_id' => $chairId,
 				'title'      => $request->input('title', $detail->title),
 				'date'       => $date,
 				'start_time' => $startTime,

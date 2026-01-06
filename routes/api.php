@@ -94,6 +94,7 @@ Route::middleware(['role:Admin'])->group(function () {
 
         // for meeting details propagations
         Route::apiResource('meetings-details', MeetingDetailController::class);
+        Route::get('/users/select2', [MeetingDetailController::class, 'chairUsersSelect2']);
 
         Route::get('v1/meetings/free', [MeetingAvailabilityController::class, 'free'])->name('meetings.free');
 

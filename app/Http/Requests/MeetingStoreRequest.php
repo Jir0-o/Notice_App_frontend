@@ -14,6 +14,7 @@ class MeetingStoreRequest extends FormRequest
             'title'     => ['required','string','max:255'],
             'capacity'  => ['nullable','integer','min:1','max:100000'],
             'is_active' => ['sometimes','boolean'],
+            'meeting_chair_id' => ['nullable', 'integer', 'exists:users,id'],
         ];
     }
 }

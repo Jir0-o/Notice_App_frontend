@@ -15,6 +15,14 @@ Route::view('/ext/login', 'frontend.ext.login')->name('ext.login');
 
 Route::middleware('web', 'front.token')->group(function () {
 
+    // Meetings
+    Route::view('/meetings', 'frontend.meetings.index')->name('meetings.index');
+    Route::view('/view-notices', 'frontend.notices.index')->name('notices.index');
+    Route::view('/generate/notice', 'frontend.notices.notice_generate')->name('notices.generate');
+    // Rooms
+    Route::view('/rooms', 'frontend.rooms.index')->name('rooms.index');
+
+
 Route::view('/ext/panel', 'frontend.ext.panel')->name('ext.panel');
 
 // Super Admin Routes
@@ -35,21 +43,14 @@ Route::view('/user/meetings', 'frontend.meetings.user_meetings')->name('user.mee
 Route::view('/user-notices', 'frontend.user_notices.index')->name('user-notices.index');
 Route::view('/user-notices/{id}', 'frontend.user_notices.show')->name('user-notices.show');
 
-// Admin Routes
-// Meetings
-Route::view('/meetings', 'frontend.meetings.index')->name('meetings.index');
 
 Route::view('/generate/view/notice/{id}', 'frontend.notices.noticePdf')->name('notices.pdf');
 
 // Notices
-Route::view('/view-notices', 'frontend.notices.index')->name('notices.index');
 Route::view('/notices/create', 'frontend.notices.create')->name('notices.create');
 Route::view('/notices/{id}', 'frontend.notices.show')->name('notices.show');
 Route::view('/notices/{id}/edit', 'frontend.notices.edit')->name('notices.edit');
-Route::view('/generate/notice', 'frontend.notices.notice_generate')->name('notices.generate');
 
-// Rooms
-Route::view('/rooms', 'frontend.rooms.index')->name('rooms.index');
 
 // Profile Route for All Roles
 Route::view('/user-profile', 'frontend.profile.profile')->name('user.profile.index');

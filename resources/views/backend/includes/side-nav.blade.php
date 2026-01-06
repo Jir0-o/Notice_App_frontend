@@ -110,12 +110,12 @@
 
     <!-- Settings (Super Admin only) -->
     <li class="menu-header small text-uppercase"><span class="menu-header-text">Settings</span></li>
-    <li class="menu-item menu-by-role" data-role="Super Admin" id="menu-settings" style="display:none;">
+    {{-- <li class="menu-item menu-by-role" data-role="Super Admin" id="menu-settings" style="display:none;">
       <a href="{{ route('settings') }}" class="menu-link">
         <i class="menu-icon bx bx-cog"></i>
         <div data-i18n="Settings">Settings</div>
       </a>
-    </li>
+    </li> --}}
 
     <!-- My profile (public) -->
     <li class="menu-item menu-by-role" data-public="1" id="menu-profile">

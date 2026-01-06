@@ -72,6 +72,14 @@
             </div>
           </div>
 
+          {{-- meeting chair userlist --}}
+          <div class="mb-3">
+            <label class="form-label">Meeting Chair</label>
+            <select name="meeting_chair_id" id="meeting_chair_id" class="form-select">
+              <option value="">Select meeting chair</option>
+            </select>
+          </div>
+
           <div class="mb-3">
             <label class="form-label">Room (available after start/end)</label>
             <select name="room_id" id="room_id" class="form-select">
@@ -437,7 +445,7 @@ $(function(){
           });
       });
   }
-
+ 
   function loadUsersForCheckedDepartments(){
     const checkedIds = $('.dept-checkbox:checked').map(function(){ return $(this).val(); }).get();
 
@@ -787,6 +795,10 @@ $(function(){
     fetchRooms($('#date').val(), currentTime, addMinutesToTime(currentTime, 60));
 
     if (meetingModal) meetingModal.show();
+    initChairSelect2();
+
+    // clear value AFTER init
+    $('#meeting_chair_id').val(null).trigger('change');
     fetchDepartments();
     refreshSelectedPreview();
     renderUsersBox();
@@ -957,6 +969,20 @@ $(function(){
 
     $('#btn-delete').show();
     if (meetingModal) meetingModal.show();
+    initChairSelect2();
+
+    // preselect if your event props contains meeting_chair_id
+    const chairId = m.meeting_chair_id || m.meetingChairId || null;
+    if (chairId) {
+      $.get(`${API_BASE}/users/select2`, { id: chairId }).then(function(resp){
+        const item = resp?.results?.[0];
+        if (!item) return;
+        const opt = new Option(item.text, item.id, true, true);
+        $('#meeting_chair_id').append(opt).trigger('change');
+      });
+    } else {
+      $('#meeting_chair_id').val(null).trigger('change');
+    }
 
     const currentRoomId = m.meeting?.id || m.meeting_id || m.room_id || null;
     const currentRoomTitle = m.meeting?.title || m.room_title || '';
@@ -983,6 +1009,35 @@ $(function(){
     userChangedEndTime = true;
   }
 
+  function initChairSelect2() {
+    const $chair = $('#meeting_chair_id');
+    if (!$chair.length) return;
+
+    if ($chair.hasClass('select2-hidden-accessible')) {
+      $chair.select2('destroy');
+    }
+
+    $chair.select2({
+      width: '100%',
+      placeholder: 'Select meeting chair',
+      allowClear: true,
+      dropdownParent: $('#meetingModal'),
+      ajax: {
+        url: `${API_BASE}/users/select2`,
+        dataType: 'json',
+        delay: 250,
+        data: function (params) {
+          return { q: params.term || '' };
+        },
+        processResults: function (data) {
+          return { results: data.results || [] }; 
+        }
+      }
+    });
+  }
+
+
+
   $('#meetingForm').on('submit', function(e){
     e.preventDefault();
     $('#btn-save').prop('disabled', true);
@@ -1006,10 +1061,14 @@ $(function(){
       fd.append(`external_users[${i}][email]`, u.email || '');
     });
 
+    const chairId = $('#meeting_chair_id').val();
+    if (chairId) fd.append('meeting_chair_id', chairId);
+    else fd.append('meeting_chair_id', '')
+
     // 👇 force the key to exist
-    if (!externalUsers || externalUsers.length === 0) {
-      fd.append('external_users', '[]');
-    }
+    // if (!externalUsers || externalUsers.length === 0) {
+    //   fd.append('external_users', '[]');
+    // }
 
     // files
     const files = $('#attachments')[0]?.files || [];

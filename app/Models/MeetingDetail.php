@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MeetingDetail extends Model
 {
-    protected $fillable = ['title', 'date', 'start_time', 'end_time', 'meeting_id', 'agenda'];
+    protected $fillable = ['title', 'date', 'start_time', 'end_time', 'meeting_id', 'agenda', 'meeting_chair_id'];
 
     protected $casts = [
         'date' => 'date',
@@ -27,5 +27,10 @@ class MeetingDetail extends Model
     public function meetingAttachments()
     {
         return $this->hasMany(MeetingAttachment::class, 'meeting_detail_id');
+    }
+
+    public function meetingChair()
+    {
+    return $this->belongsTo(\App\Models\User::class, 'meeting_chair_id');
     }
 }

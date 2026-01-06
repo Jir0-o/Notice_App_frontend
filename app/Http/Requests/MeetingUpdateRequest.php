@@ -14,6 +14,7 @@ class MeetingUpdateRequest extends FormRequest
             'title'     => ['sometimes','string','max:255'],
             'capacity'  => ['sometimes','integer','min:1','max:100000'],
             'is_active' => ['sometimes','boolean'],
+            'meeting_chair_id' => ['nullable', 'integer', 'exists:users,id'],
         ];
     }
 }
