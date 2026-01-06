@@ -27,8 +27,23 @@
   .loading-overlay{ text-align:center; padding:18px 10px; }
   /* download button */
   #btn-download{ padding:.4rem .6rem; border:1px solid #ccc; background:#fff; border-radius:6px; cursor:pointer; font-size:0.9rem; }
-  @media (max-width:860px){ .page{width:94%; padding:22px;} .meta{flex-direction:column; gap:6px; align-items:flex-start;} }
-    /* push the date block to the right */
+  
+  /* Edited notice message styling */
+  .edited-notice {
+    text-align: center;
+    color: red;
+    font-weight: bold;
+    margin: 20px 0;
+    padding: 10px;
+    border: 1px solid red;
+    background-color: #fff8f8;
+  }
+  
+  @media (max-width:860px){ 
+    .page{width:94%; padding:22px;} 
+    .meta{flex-direction:column; gap:6px; align-items:flex-start;} 
+  }
+  
   .meta-date{ margin-left:auto; text-align:right; }
 
   @media print{
@@ -45,6 +60,11 @@
   <div class="page" id="notice">
     <div style="position:absolute; right:12px; top:12px; z-index:10;">
       <button id="btn-download" type="button">Download / Print</button>
+    </div>
+    
+    {{-- This will be populated by JavaScript --}}
+    <div id="editedNoticeBlock" class="edited-notice" style="display:none;">
+      <!-- Message will be inserted here -->
     </div>
 
     <div class="gov center">
@@ -120,20 +140,20 @@
       if (window.toastr) toastr.error(msg);
     }
 
-      function formatBanglaDate(iso){
-        if(!iso) return '';
-        const d = new Date(iso);
-        if(!isNaN(d)){
-          try{
-            return d.toLocaleDateString('bn-BD', { day:'numeric', month:'long', year:'numeric' });
-          }catch(e){}
-          // fallback: YYYY-MM-DD -> DD/MM/YYYY with Bangla digits
-          const bn = s => String(s).replace(/\d/g, c => '০১২৩৪৫৬৭৮৯'[c]);
-          const [y,m,day] = String(iso).split('-');
-          return bn(`${day}/${m}/${y}`);
-        }
-        return iso; // as-is if invalid
+    function formatBanglaDate(iso){
+      if(!iso) return '';
+      const d = new Date(iso);
+      if(!isNaN(d)){
+        try{
+          return d.toLocaleDateString('bn-BD', { day:'numeric', month:'long', year:'numeric' });
+        }catch(e){}
+        // fallback: YYYY-MM-DD -> DD/MM/YYYY with Bangla digits
+        const bn = s => String(s).replace(/\d/g, c => '০১২৩৪৫৬৭৮৯'[c]);
+        const [y,m,day] = String(iso).split('-');
+        return bn(`${day}/${m}/${y}`);
       }
+      return iso; // as-is if invalid
+    }
 
     function safeHtmlText(s){ return s == null ? '' : String(s); }
 
@@ -155,9 +175,21 @@
     function render(template){
       $('#pageTitle').text(template.subject || 'Notice');
       $('#memorialNo').text(template.memorial_no || '-');
-      $('#noticeDate').text(template.date ? formatBanglaDate(template.date) : '-');
+      
+      // Use date_bn if available, otherwise format the date
+      $('#noticeDate').text(template.date_bn || (template.date ? formatBanglaDate(template.date) : '-'));
+      
       $('#noticeTitle').text(template.subject || '-');
       $('#noticeBody').html(template.body || '');
+
+      // Show edited notice message if it's edited
+      if (template.is_edited) {
+        let message = 'একই তারিখ ও স্মারকে স্থলাভিষিক্ত হবে।';
+        if (template.created_at_formatted && template.updated_at_formatted) {
+          message;
+        }
+        $('#editedNoticeBlock').html(message).show();
+      }
 
       // signature / user info
       const user = template.user || null;
@@ -189,8 +221,10 @@
           );
           dList.append(row);
         });
+        $('#distributionsSection').show();
       } else {
         dList.append($('<p class="muted">কোন বিতরণ নেই।</p>'));
+        $('#distributionsSection').show();
       }
 
       // regards
@@ -202,13 +236,15 @@
           if (r.note) p.append('<br><small>Note: ' + safeHtmlText(r.note) + '</small>');
           rList.append(p);
         });
+        $('#regardsSection').show();
       } else {
         rList.append($('<p class="muted">কোন অনুলিপি নিয়োগ নেই।</p>'));
+        $('#regardsSection').show();
       }
 
       $('#loading').hide();
       $('#loadError').hide();
-      $('#metaBlock, #noticeTitle, #noticeBody, #signatureBlock, #distributionsSection, #regardsSection').show();
+      $('#metaBlock, #noticeTitle, #noticeBody, #signatureBlock').show();
     }
 
     function fetchTemplate(){
@@ -224,6 +260,31 @@
       const headers = { 'X-Requested-With': 'XMLHttpRequest' };
       if (token) headers['Authorization'] = 'Bearer ' + token;
 
+      // Try to fetch the enhanced view data first, fallback to regular show
+      $.ajax({
+        url: API_BASE + '/notice-templates/' + encodeURIComponent(templateId) + '/view',
+        method: 'GET',
+        headers: headers,
+        success: function(res){
+          if (!res || (typeof res !== 'object')) {
+            // Fallback to regular endpoint
+            fetchRegularTemplate();
+            return;
+          }
+          render(res);
+        },
+        error: function() {
+          // Fallback to regular endpoint
+          fetchRegularTemplate();
+        }
+      });
+    }
+
+    function fetchRegularTemplate() {
+      const token = localStorage.getItem('api_token') || null;
+      const headers = { 'X-Requested-With': 'XMLHttpRequest' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+
       $.ajax({
         url: API_BASE + '/notice-templates/' + encodeURIComponent(templateId),
         method: 'GET',
@@ -233,6 +294,26 @@
             showError('Invalid response from server.');
             return;
           }
+          
+          // Calculate is_edited if not provided by API
+          if (res.created_at && res.updated_at) {
+            const created = new Date(res.created_at);
+            const updated = new Date(res.updated_at);
+            res.is_edited = created.getTime() !== updated.getTime();
+            res.created_at_formatted = new Date(res.created_at).toLocaleDateString('bn-BD');
+            res.updated_at_formatted = new Date(res.updated_at).toLocaleDateString('bn-BD');
+          }
+          
+          // Format date to Bangla if date_bn not provided
+          if (res.date && !res.date_bn) {
+            const d = new Date(res.date);
+            const bnDigits = s => String(s).replace(/\d/g, c => '০১২৩৪৫৬৭৮৯'[c]);
+            const day = d.getDate().toString().padStart(2, '0');
+            const month = (d.getMonth() + 1).toString().padStart(2, '0');
+            const year = d.getFullYear();
+            res.date_bn = bnDigits(`${day}/${month}/${year}`);
+          }
+          
           render(res);
         },
         error: function(xhr){

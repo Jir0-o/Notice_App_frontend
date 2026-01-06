@@ -84,37 +84,41 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // notice search
         Route::get('notices-search', [NoticeController::class, 'noticeSearch'])->name('notices.search');
-
-Route::middleware(['role:Admin'])->group(function () {
-
-        // for meeting
-        Route::apiResource('meetings', MeetingController::class);
-        // Extra endpoints if you want quick toggles:
-        Route::patch('meetings/{meeting}/toggle', [MeetingController::class, 'toggle'])->name('meetings.toggle');
-
-        // for meeting details propagations
-        Route::apiResource('meetings-details', MeetingDetailController::class);
+        
         Route::get('/users/select2', [MeetingDetailController::class, 'chairUsersSelect2']);
+});
 
-        Route::get('v1/meetings/free', [MeetingAvailabilityController::class, 'free'])->name('meetings.free');
+// All routes accessible to Admin, PO, and AEPD
+Route::middleware(['role:Admin|PO|AEPD'])->group(function () {
+    // for meeting
+    Route::apiResource('meetings', MeetingController::class);
+    Route::patch('meetings/{meeting}/toggle', [MeetingController::class, 'toggle'])->name('meetings.toggle');
+    Route::apiResource('meetings-details', MeetingDetailController::class);
+    Route::get('v1/meetings/free', [MeetingAvailabilityController::class, 'free'])->name('meetings.free');
 
-        // for notice templates
-        Route::get   ('/notice-templates',        [NoticeTemplateController::class, 'index']);
-        Route::post  ('/notice-templates',        [NoticeTemplateController::class, 'store']);
-        Route::get   ('/notice-templates/{id}',   [NoticeTemplateController::class, 'show']);
-        Route::match(['put','patch'], '/notice-templates/{id}', [NoticeTemplateController::class, 'update']);
-        Route::delete('/notice-templates/{id}',   [NoticeTemplateController::class, 'destroy']);
+    // for notice templates
+    Route::get   ('/notice-templates',        [NoticeTemplateController::class, 'index']);
+    Route::post  ('/notice-templates',        [NoticeTemplateController::class, 'store']);
+    Route::get   ('/notice-templates/{id}',   [NoticeTemplateController::class, 'show']);
+    Route::match(['put','patch'], '/notice-templates/{id}', [NoticeTemplateController::class, 'update']);
+    Route::delete('/notice-templates/{id}',   [NoticeTemplateController::class, 'destroy']);
 
-        // JSON ONLY — no PDF here
-        // Route::get('/notice-templates/{id}', [NoticeTemplateController::class, 'showApi'])
-        //     ->name('api.notice.show');
+    Route::get('/notice-templates/{id}/pdf', [NoticeTemplateController::class, 'download'])
+        ->name('api.notice.pdf');
 
-        // routes/api.php
-        Route::get('/notice-templates/{id}/pdf', [NoticeTemplateController::class, 'download'])
-            ->name('api.notice.pdf');
+    Route::get('/meetings/conflicts/user', [MeetingAvailabilityController::class, 'checkUser'])->name('meetings.conflicts.user');
+});
 
-        Route::get('/meetings/conflicts/user', [MeetingAvailabilityController::class, 'checkUser'])->name('meetings.conflicts.user');
-    });
+// Routes only for Admin and AEPD (separate group)
+Route::middleware(['role:Admin|AEPD'])->group(function () {
+    Route::post('/notice-templates/{id}/approve', [NoticeTemplateController::class, 'approve']);
+    Route::post('/notice-templates/{id}/reject', [NoticeTemplateController::class, 'reject']);
+    Route::get('/notice-templates/pending-approval', [NoticeTemplateController::class, 'pendingApproval']);
+});
+
+// Route for PO to see their own notices
+Route::middleware(['role:PO'])->group(function () {
+    Route::get('/notice-templates/my', [NoticeTemplateController::class, 'myNotices']);
 });
 
 });

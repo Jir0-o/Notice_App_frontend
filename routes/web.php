@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\NoticeController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
@@ -27,6 +28,10 @@ Route::middleware('web', 'front.token')->group(function () {
 
 
 Route::view('/ext/panel', 'frontend.ext.panel')->name('ext.panel');
+
+Route::get('/notices/my', function () {
+    return view('notices.my');
+})->name('notices.my');
 
 // Super Admin Routes
 Route::view('/departments', 'frontend.departments.index')->name('departments.index');

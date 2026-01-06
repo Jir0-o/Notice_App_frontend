@@ -17,10 +17,14 @@ class RolePermission extends Seeder
      */
     public function run()
     {
-        $role = Role::create([
-            'name'=>'Super Admin'
-        ]);
+        // Check and create roles if they don't exist
+        $superAdminRole = Role::firstOrCreate(['name' => 'Super Admin']);
+        $adminRole = Role::firstOrCreate(['name' => 'Admin']);
+        $userRole = Role::firstOrCreate(['name' => 'User']);
+        $poRole = Role::firstOrCreate(['name' => 'PO']);
+        $aepdRole = Role::firstOrCreate(['name' => 'AEPD']);
 
+        // Create permissions
         $permissions = [
             ['name' => 'User List'],
             ['name' => 'Create User'],
@@ -30,40 +34,86 @@ class RolePermission extends Seeder
             ['name' => 'Create Role'],
             ['name' => 'edit Role'],
             ['name' => 'delete Role'],
+            ['name' => 'Notice List'],
+            ['name' => 'Create Notice'],
+            ['name' => 'Edit Notice'],
+            ['name' => 'Delete Notice'],
+            ['name' => 'Approve Notice'],
+            ['name' => 'Reject Notice'],
+            ['name' => 'View Notice PDF'],
+            ['name' => 'Download Notice PDF'],
         ];
 
         foreach($permissions as $item){
-            Permission::create($item);
+            Permission::firstOrCreate(['name' => $item['name']]);
         }
 
-        $role->syncPermissions(Permission::all());
+        // Assign permissions to Super Admin
+        $superAdminRole->syncPermissions(Permission::all());
 
-        $user = User::where('email', 'superadmin@gmail.com')->first();
-        $user->assignRole($role);
+        // Assign user (only if not already assigned)
+        $superAdminUser = User::where('email', 'superadmin@gmail.com')->first();
+        if ($superAdminUser && !$superAdminUser->hasRole('Super Admin')) {
+            $superAdminUser->assignRole($superAdminRole);
+        }
 
-        $roleAdmin = Role::create([
-            'name' => 'Admin'
-        ]);
-
-        $roleAdmin->syncPermissions(Permission::whereIn('name', [
+        // Assign permissions to Admin
+        $adminRole->syncPermissions(Permission::whereIn('name', [
             'User List',
             'Create User',
             'edit User',
             'delete User',
+            'Notice List',
+            'Create Notice',
+            'Edit Notice',
+            'Delete Notice',
+            'View Notice PDF',
+            'Download Notice PDF',
         ])->get());
 
-        $userAdmin = User::where('email', 'admin@gmail.com')->first();
-        $userAdmin->assignRole($roleAdmin);
+        $adminUser = User::where('email', 'admin@gmail.com')->first();
+        if ($adminUser && !$adminUser->hasRole('Admin')) {
+            $adminUser->assignRole($adminRole);
+        }
 
-        $roleUser = Role::create([
-            'name' => 'User'
-        ]);
+        // Assign permissions to PO
+        $poRole->syncPermissions(Permission::whereIn('name', [
+            'Notice List',
+            'Create Notice',
+            'Edit Notice',
+            'View Notice PDF',
+            'Download Notice PDF',
+        ])->get());
 
-        $roleUser->syncPermissions(Permission::whereIn('name', [
+        $poUser = User::where('email', 'po@gmail.com')->first();
+        if ($poUser && !$poUser->hasRole('PO')) {
+            $poUser->assignRole($poRole);
+        }
+
+        // Assign permissions to AEPD
+        $aepdRole->syncPermissions(Permission::whereIn('name', [
+            'Notice List',
+            'Approve Notice',
+            'Reject Notice',
+            'View Notice PDF',
+            'Download Notice PDF',
+        ])->get());
+
+        $aepdUser = User::where('email', 'aepd@gmail.com')->first();
+        if ($aepdUser && !$aepdUser->hasRole('AEPD')) {
+            $aepdUser->assignRole($aepdRole);
+        }
+
+        // Assign permissions to regular User
+        $userRole->syncPermissions(Permission::whereIn('name', [
             'User List',
+            'Notice List',
+            'View Notice PDF',
         ])->get());
 
-        $userUser = User::where('email', 'user@gmail.com')->first();
-        $userUser->assignRole($roleUser);
+        $regularUser = User::where('email', 'user@gmail.com')->first();
+        if ($regularUser && !$regularUser->hasRole('User')) {
+            $regularUser->assignRole($userRole);
+        }
     }
 }

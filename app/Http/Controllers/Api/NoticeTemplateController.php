@@ -21,14 +21,38 @@ class NoticeTemplateController extends Controller
     public function index(Request $request)
     {
         $perPage = (int) $request->get('per_page', 10);
+        $user = $request->user();
 
-        $data = NoticeTemplate::with(['distributions', 'regards', 'user.designation'])
-            ->latest('id')
-            ->paginate($perPage);
+        $query = NoticeTemplate::with(['distributions', 'regards', 'user.designation', 'approver']);
+
+        // If user is PO, only show their own notices
+        if ($user->hasRole('PO')) {
+            $query->where('user_id', $user->id);
+        }
+        
+
+        $data = $query->latest('id')->paginate($perPage);
 
         return response()->json($data);
     }
 
+    public function myNotices(Request $request)
+    {
+        $perPage = (int) $request->get('per_page', 10);
+        $user = $request->user();
+        
+        // Optional: Check if user is PO (add middleware in routes instead)
+        if (!$user->hasRole('PO')) {
+            return response()->json(['error' => 'Unauthorized. This route is for PO users only.'], 403);
+        }
+        
+        $data = NoticeTemplate::with(['distributions', 'regards', 'approver'])
+            ->where('user_id', $user->id)
+            ->latest()
+            ->paginate($perPage);
+
+        return response()->json($data);
+    }
     /**
      * Show single template with children.
      * GET /api/notice-templates/{id}
@@ -37,6 +61,16 @@ class NoticeTemplateController extends Controller
     {
         $tpl = NoticeTemplate::with(['distributions', 'regards', 'user.designation'])
             ->findOrFail($id);
+
+        // Calculate if the notice has been edited
+        $isEdited = !$tpl->created_at->eq($tpl->updated_at);
+        
+        $tpl->is_edited = $isEdited;
+        $tpl->created_at_formatted = $tpl->created_at->format('d/m/Y');
+        $tpl->updated_at_formatted = $tpl->updated_at->format('d/m/Y');
+        
+        // Also add Bangla date for display
+        $tpl->date_bn = $this->bnDigits($tpl->date->format('d/m/Y'));
 
         return response()->json($tpl);
     }
@@ -53,7 +87,7 @@ class NoticeTemplateController extends Controller
             'subject'        => ['required','string','max:255'],
             'body'           => ['required','string'],
             'signature_body' => ['nullable','string'],
-            'status'         => ['nullable','in:draft,published,archived'],
+            'status'         => ['nullable','in:draft,pending,published,archived'],
             'is_active'      => ['nullable','boolean'],
 
             // Distributions payload
@@ -63,7 +97,7 @@ class NoticeTemplateController extends Controller
             'distributions.external_users.*.name'  => ['required_with:distributions.external_users','string','max:150'],
             'distributions.external_users.*.designation' => ['nullable','string','max:150'],
 
-            // Regards payload (same as distributions but +note)
+            // Regards payload
             'regards.internal_user_ids'            => ['nullable','array'],
             'regards.internal_user_ids.*'          => ['nullable','integer','exists:users,id'],
             'regards.external_users'               => ['nullable','array'],
@@ -73,42 +107,75 @@ class NoticeTemplateController extends Controller
         ]);
 
         return DB::transaction(function () use ($validated, $request) {
+            $user = $request->user();
+            $status = $validated['status'] ?? 'draft';
+            
+            // Set approval status based on user role
+            $approvalStatus = 'pending';
+            $approvedBy = null;
+            $approvedAt = null;
+            
+            if ($user->hasRole('PO')) {
+                // PO cannot publish directly, needs AEPD approval
+                $approvalStatus = 'pending';
+                if ($status === 'published') {
+                    $status = 'pending'; // Set to pending for approval
+                }
+            } elseif ($user->hasRole('AEPD')) {
+                // AEPD can publish directly or approve PO's notices
+                $approvalStatus = 'approved';
+                $approvedBy = $user->id;
+                $approvedAt = now();
+                if ($status === 'published') {
+                    $approvalStatus = 'approved';
+                }
+            } elseif ($user->hasRole('Admin')) {
+                // Admin can publish directly
+                $approvalStatus = 'approved';
+                $approvedBy = $user->id;
+                $approvedAt = now();
+                if ($status === 'published') {
+                    $approvalStatus = 'approved';
+                }
+            }
 
             $tpl = NoticeTemplate::create([
-                'user_id'        => $request->user()->id, // creator
+                'user_id'        => $user->id,
                 'memorial_no'    => $validated['memorial_no'],
                 'date'           => $validated['date'],
                 'subject'        => $validated['subject'],
                 'body'           => $validated['body'],
                 'signature_body' => $validated['signature_body'] ?? null,
-                'status'=> $validated['status'],
+                'status'         => $status,
+                'approval_status'=> $approvalStatus,
+                'approved_by'    => $approvedBy,
+                'approved_at'    => $approvedAt,
             ]);
 
             // build children
             $this->syncDistributions($tpl, $validated['distributions'] ?? []);
             $this->syncRegards($tpl, $validated['regards'] ?? []);
 
-            $tpl->load(['distributions','regards','user']);
+            $tpl->load(['distributions','regards','user','approver']);
             return response()->json($tpl, 201);
         });
     }
 
     /**
-     * Update template (simple strategy: replace children).
-     * PUT /api/notice-templates/{id}
+     * Update template
      */
     public function update(Request $request, $id)
     {
         $tpl = NoticeTemplate::findOrFail($id);
+        $user = $request->user();
 
         $validated = $request->validate([
-            // parent fields (optional)
             'memorial_no'    => ['sometimes','string','max:100','unique:notice_templates,memorial_no,'.$tpl->id],
             'date'           => ['sometimes','date'],
             'subject'        => ['sometimes','string','max:255'],
             'body'           => ['sometimes','string'],
             'signature_body' => ['nullable','string'],
-            'status'         => ['sometimes','in:draft,published,archived'],
+            'status'         => ['sometimes','in:draft,pending,published,archived'],
             'is_active'      => ['sometimes','boolean'],
 
             // keep parent keys so they remain in $validated
@@ -128,19 +195,49 @@ class NoticeTemplateController extends Controller
             'regards.external_users.*.note'        => ['nullable','string'],
         ]);
 
-        return DB::transaction(function () use ($validated, $tpl, $request) {
-            // ✅ Explicit field assignment (don’t dump arrays into fill)
+        return DB::transaction(function () use ($validated, $tpl, $request, $user) {
+            // Handle approval logic
             $parentUpdates = [];
-            foreach (['memorial_no','date','subject','body','signature_body','status','is_active'] as $key) {
+            
+            if (isset($validated['status'])) {
+                if ($user->hasRole('PO')) {
+                    // PO can only save as draft or submit for approval
+                    if ($validated['status'] === 'published') {
+                        $parentUpdates['status'] = 'pending';
+                        $parentUpdates['approval_status'] = 'pending';
+                    } else {
+                        $parentUpdates['status'] = $validated['status'];
+                    }
+                } elseif ($user->hasRole('AEPD') && $tpl->approval_status === 'pending') {
+                    // AEPD can approve PO's pending notices
+                    if ($validated['status'] === 'published') {
+                        $parentUpdates['approval_status'] = 'approved';
+                        $parentUpdates['approved_by'] = $user->id;
+                        $parentUpdates['approved_at'] = now();
+                        $parentUpdates['status'] = 'published';
+                    }
+                } elseif ($user->hasRole('Admin') || $user->hasRole('AEPD')) {
+                    // Admin/AEPD can publish directly
+                    if ($validated['status'] === 'published') {
+                        $parentUpdates['approval_status'] = 'approved';
+                        $parentUpdates['approved_by'] = $user->id;
+                        $parentUpdates['approved_at'] = now();
+                    }
+                    $parentUpdates['status'] = $validated['status'];
+                }
+            }
+
+            // Update other fields
+            foreach (['memorial_no','date','subject','body','signature_body','is_active'] as $key) {
                 if (array_key_exists($key, $validated)) {
                     $parentUpdates[$key] = $validated[$key];
                 }
             }
+
             if ($parentUpdates) {
                 $tpl->update($parentUpdates);
             }
 
-            // ✅ Rebuild children if the client sent the key (even empty array to wipe)
             if ($request->has('distributions')) {
                 $tpl->distributions()->delete();
                 $this->syncDistributions($tpl, $validated['distributions'] ?? []);
@@ -152,11 +249,83 @@ class NoticeTemplateController extends Controller
             }
 
             return response()->json(
-                $tpl->load(['distributions','regards','user'])
+                $tpl->load(['distributions','regards','user','approver'])
             );
         });
     }
 
+    public function approve(Request $request, $id)
+    {
+        $tpl = NoticeTemplate::findOrFail($id);
+        $user = $request->user();
+
+        if (!$user->hasRole('AEPD')) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        if ($tpl->approval_status !== 'pending') {
+            return response()->json(['error' => 'Notice is not pending approval'], 400);
+        }
+
+        $tpl->update([
+            'approval_status' => 'approved',
+            'approved_by' => $user->id,
+            'approved_at' => now(),
+            'status' => 'published',
+        ]);
+
+        return response()->json(['message' => 'Notice approved successfully', 'notice' => $tpl]);
+    }
+
+    /**
+     * Reject notice (for AEPD role)
+     */
+    public function reject(Request $request, $id)
+    {
+        $tpl = NoticeTemplate::findOrFail($id);
+        $user = $request->user();
+
+        if (!$user->hasRole('AEPD')) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'rejection_reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        $tpl->update([
+            'approval_status' => 'rejected',
+            'rejected_by' => $user->id,
+            'rejected_at' => now(),
+            'rejection_reason' => $validated['rejection_reason'],
+            'status' => 'draft',
+        ]);
+
+        return response()->json(['message' => 'Notice rejected', 'notice' => $tpl]);
+    }
+
+    /**
+     * Get pending approval notices
+     */
+    public function pendingApproval(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user->hasRole('AEPD')) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $notices = NoticeTemplate::with(['user.designation', 'distributions', 'regards'])
+            ->where('approval_status', 'pending')
+            ->latest()
+            ->paginate(10);
+
+        return response()->json($notices);
+    }
+
+    /**
+     * Get my created notices (for PO)
+     */
 
     /**
      * Delete template (children cascade via FK).
@@ -258,10 +427,12 @@ class NoticeTemplateController extends Controller
 		}
 	}
 
-	public function download($id)
+    public function download($id)
     {
-        $template = NoticeTemplate::with(['distributions','regards','user.designation'])
+        $template = NoticeTemplate::with(['distributions','regards','user.designation','approver.designation'])
             ->findOrFail($id);
+
+        $isEdited = !$template->created_at->eq($template->updated_at);
 
         $data = [
             // fixed header lines (Bangla)
@@ -285,9 +456,19 @@ class NoticeTemplateController extends Controller
             'sign_designation'=> optional($template->user->designation)->name,
             'signature_body'  => $template->signature_body ?? '',
 
+            // approver signature (if approved by AEPD)
+            'approver_name'   => $template->approver->name ?? null,
+            'approver_designation' => optional($template->approver->designation)->name ?? null,
+            'approval_status' => $template->approval_status,
+            'approved_at'     => $template->approved_at ? $template->approved_at->format('d/m/Y') : null,
+
             // lists
-            'distributions'   => $template->distributions,   // name, designation
-            'regards'         => $template->regards,         // name, designation, note
+            'distributions'   => $template->distributions,
+            'regards'         => $template->regards,
+
+            'is_edited'       => $isEdited,
+            'created_at'      => $template->created_at->format('d/m/Y'),
+            'updated_at'      => $template->updated_at->format('d/m/Y'),
         ];
 
         // load blade -> pdf

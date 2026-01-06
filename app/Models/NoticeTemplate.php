@@ -10,7 +10,10 @@ class NoticeTemplate extends Model
     // use SoftDeletes;
 
     protected $fillable = [
-        'memorial_no','date','subject','body','signature_body','user_id','is_active','status'
+        'memorial_no','date','subject','body','signature_body','user_id','is_active','status',
+        'approval_status', 
+        'approved_by',     
+        'approved_at', 
     ];
 
     protected $casts = [
@@ -21,5 +24,14 @@ class NoticeTemplate extends Model
     public function user()      { return $this->belongsTo(User::class); }
     public function distributions() { return $this->hasMany(NoticeTemplateDistribution::class); }
     public function regards()   { return $this->hasMany(NoticeTemplateRegard::class); }
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function rejector()
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
+    }
 }
  

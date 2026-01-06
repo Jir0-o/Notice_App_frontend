@@ -79,7 +79,7 @@
     </li>
 
     <!-- NEW: Generate Notice (Admin only) -->
-    <li class="menu-item menu-by-role" data-role="Admin" id="menu-notice-generate" style="display:none;">
+    <li class="menu-item menu-by-role" data-role="Admin, PO, AEPD" id="menu-notice-generate" style="display:none;">
       <a href="{{ route('notices.generate') }}" class="menu-link">
         <i class="menu-icon tf-icons bx bx-edit-alt"></i>
         <div data-i18n="Generate Notice">Create Notice</div>
@@ -129,6 +129,7 @@
 
 <!-- Role gating + Active item -->
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<!-- Update the sidebar script section -->
 <script>
 (function($){
   $(function(){
@@ -164,7 +165,6 @@
         try { href = new URL(href, window.location.origin).pathname; } catch(e){}
         href = href.replace(/\/+$/,'') || '/';
 
-        // choose the longest href that is a prefix of current
         if(current === href || (href !== '/' && current.startsWith(href))){
           if(href.length > bestLen){
             best = $(this);
@@ -208,24 +208,18 @@
 
       if(!role){ setActiveMenu(); return; }
 
+      // Store role globally for use in other scripts
+      window.currentUserRole = role;
+      localStorage.setItem('user_role', role);
+
       // Reveal items matching role (data-role can be comma-separated)
       $('[data-role]').each(function(){
         const rolesList = (($(this).attr('data-role') || '')).split(',').map(s => s.trim()).filter(Boolean);
         if(rolesList.includes(role)){ $(this).show(); }
       });
 
-      // Optionally adjust dashboard link per role (kept for compatibility)
-      if(role === 'Super Admin'){
-        $('#menu-dashboard-link').attr('href', '{{ route('dashboard') }}');
-      } else if(role === 'Admin'){
-        // no dashboard for Admin – keep hidden by role rule
-      } else if(role === 'User'){
-        // no dashboard for User – keep hidden by role rule
-      }
-
       setActiveMenu();
     }).fail(function(){
-      // On failure, only public items remain; still set active
       setActiveMenu();
     });
 

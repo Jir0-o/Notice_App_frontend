@@ -32,6 +32,14 @@ class MeetingDetailResource extends JsonResource
         $startVal  = $this->start_time;
         $endVal    = $this->end_time;
 
+        $meetingChair = null;
+            if ($this->meetingChair) {
+                $meetingChair = [
+                    'id' => $this->meetingChair->id,
+                    'name' => $this->meetingChair->name,
+                    'email' => $this->meetingChair->email,
+                ];
+        }
         // date
         if ($dateValue instanceof \DateTimeInterface) {
             $date = $dateValue->toDateString();
@@ -73,6 +81,8 @@ class MeetingDetailResource extends JsonResource
             'start_time' => $startTime,
             'end_time'   => $endTime,
             'meeting_id' => $this->meeting_id,
+            'meeting_chair_id' => $this->meeting_chair_id,
+            'meeting_chair' => $meetingChair,
 
             // meeting
             'meeting'    => $this->when($includeMeeting, function () {

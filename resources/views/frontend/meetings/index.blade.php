@@ -196,6 +196,14 @@
             </div>
 
             <div class="mb-3">
+              <small class="text-muted">Meeting Chair</small>
+              <div class="p-2 border rounded">
+                <div id="detail_chair" class="fw-medium">—</div>
+                <small id="detail_chair_email" class="text-muted">—</small>
+              </div>
+            </div>
+
+            <div class="mb-3">
               <small class="text-muted">Room</small>
               <div class="p-2 border rounded">
                 <div id="detail_room" class="fw-medium">—</div>
@@ -797,7 +805,7 @@ $(function(){
     if (meetingModal) meetingModal.show();
     initChairSelect2();
 
-    // clear value AFTER init
+    // Clear value AFTER init
     $('#meeting_chair_id').val(null).trigger('change');
     fetchDepartments();
     refreshSelectedPreview();
@@ -827,6 +835,15 @@ $(function(){
 
     const agendaHtml = ext.agenda || '';
     $('#detail_agenda').html(agendaHtml || '<div class="text-muted small">No agenda provided</div>');
+
+    const meetingChair = ext.meeting_chair; 
+      if (meetingChair && meetingChair.name) {
+          $('#detail_chair').text(meetingChair.name);
+          $('#detail_chair_email').text(meetingChair.email || '');
+      } else {
+          $('#detail_chair').text('—');
+          $('#detail_chair_email').text('—');
+    }
 
     const atts = Array.isArray(ext.meeting_attachments) ? ext.meeting_attachments : (Array.isArray(ext.attachments) ? ext.attachments : []);
     const $att = $('#detail_attachments').empty();
@@ -969,20 +986,35 @@ $(function(){
 
     $('#btn-delete').show();
     if (meetingModal) meetingModal.show();
+    
     initChairSelect2();
+    
+    const chairId = m.meeting_chair_id || null;
+    
 
-    // preselect if your event props contains meeting_chair_id
-    const chairId = m.meeting_chair_id || m.meetingChairId || null;
-    if (chairId) {
-      $.get(`${API_BASE}/users/select2`, { id: chairId }).then(function(resp){
-        const item = resp?.results?.[0];
-        if (!item) return;
-        const opt = new Option(item.text, item.id, true, true);
-        $('#meeting_chair_id').append(opt).trigger('change');
-      });
-    } else {
-      $('#meeting_chair_id').val(null).trigger('change');
-    }
+    setTimeout(() => {
+      if (chairId) {
+
+        $.get(`${API_BASE}/users/select2`, { id: chairId })
+          .then(function(resp) {
+            const item = resp?.results?.[0];
+            if (item) {
+              // Create a new option and append it
+              const option = new Option(item.text, item.id, true, true);
+              $('#meeting_chair_id').append(option).trigger('change');
+            } else {
+
+              $('#meeting_chair_id').val(chairId).trigger('change');
+            }
+          })
+          .fail(function() {
+            // If the AJAX fails, still try to set the value
+            $('#meeting_chair_id').val(chairId).trigger('change');
+          });
+      } else {
+        $('#meeting_chair_id').val(null).trigger('change');
+      }
+    }, 100);
 
     const currentRoomId = m.meeting?.id || m.meeting_id || m.room_id || null;
     const currentRoomTitle = m.meeting?.title || m.room_title || '';
@@ -1027,7 +1059,9 @@ $(function(){
         dataType: 'json',
         delay: 250,
         data: function (params) {
-          return { q: params.term || '' };
+          return { 
+            q: params.term || '',
+          };
         },
         processResults: function (data) {
           return { results: data.results || [] }; 
@@ -1035,7 +1069,6 @@ $(function(){
       }
     });
   }
-
 
 
   $('#meetingForm').on('submit', function(e){
@@ -1065,7 +1098,7 @@ $(function(){
     if (chairId) fd.append('meeting_chair_id', chairId);
     else fd.append('meeting_chair_id', '')
 
-    // 👇 force the key to exist
+    //force the key to exist
     // if (!externalUsers || externalUsers.length === 0) {
     //   fd.append('external_users', '[]');
     // }

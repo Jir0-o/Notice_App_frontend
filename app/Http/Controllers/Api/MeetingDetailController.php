@@ -110,6 +110,10 @@ class MeetingDetailController extends Controller
 			$q->with('meeting:id,title,capacity,is_active');
 		}
 
+		if (str_contains($include, 'meetingChair')) {
+			$q->with('meetingChair:id,name,email');
+		}
+
 		// Counts
 		$q->withCount('propagations', 'meetingAttachments');
 
@@ -154,11 +158,15 @@ class MeetingDetailController extends Controller
 	public function chairUsersSelect2(Request $request)
 	{
 		$q = trim((string) $request->query('q', ''));
+		$id = $request->query('id');
 
 		$users = User::query()
 			->select('id', 'name', 'email', 'phone')
 			->where('is_active', 1)
 			->where('status', 'active')
+			->when($id, function ($query) use ($id) {
+				$query->where('id', $id);
+			})
 			->when($q !== '', function ($query) use ($q) {
 				$query->where(function ($x) use ($q) {
 					$x->where('name', 'like', "%{$q}%")
@@ -817,7 +825,9 @@ class MeetingDetailController extends Controller
      */
     public function show(Request $request, $detailId)
 	{
-		$detail = \App\Models\MeetingDetail::withCount('propagations')->findOrFail($detailId);
+		$detail = \App\Models\MeetingDetail::withCount('propagations')
+			->with(['meetingChair:id,name,email']) 
+			->findOrFail($detailId);
 
 		// Parse include param: supports "true", "1", "propagations", or comma lists
 		$includeRaw = (string) $request->query('include', '');
