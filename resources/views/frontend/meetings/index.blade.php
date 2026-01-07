@@ -21,6 +21,20 @@
   .file-chip button { border:none; background:none; color:#dc3545; }
   #meetingModal .modal-body { background: #f7f8f9; }
   .update-note { font-size: .8rem; color: #b30000; text-align: center; }
+
+  /* Bangladesh weekend highlight: Friday(5) + Saturday(6) */
+  .fc .bd-weekend-cell{
+    background: rgba(220, 53, 69, .08) !important; /* light red */
+  }
+  .fc .bd-weekend-cell .fc-daygrid-day-number{
+    color: #dc3545 !important;
+    font-weight: 700;
+  }
+  .fc .bd-weekend-header{
+    background: rgba(220, 53, 69, .12) !important;
+    color: #b30000 !important;
+    font-weight: 700;
+  }
 </style>
 
 <div class="card">
@@ -320,12 +334,57 @@ $(function(){
   agendaQuill = new Quill('#agendaEditor', { theme: 'snow' });
 
   const calendarEl = document.getElementById('calendar');
+  // Bangladesh weekend: Friday(5), Saturday(6)
+  const BD_WEEKEND_DAYS = [5, 6];
+
+  function isBdWeekend(dateLike) {
+    if (!dateLike) return false;
+
+    // if string "YYYY-MM-DD"
+    if (typeof dateLike === 'string') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateLike)) return false;
+      dateLike = new Date(dateLike + 'T00:00:00'); // local parse
+    }
+
+    const d = (dateLike instanceof Date) ? dateLike : new Date(dateLike);
+    if (isNaN(d.getTime())) return false;
+
+    return BD_WEEKEND_DAYS.includes(d.getDay());
+  }
+
   calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: 'dayGridMonth',
     height: 'auto',
-    dateClick: function(info){ openCreateModal(info.dateStr); },
-    eventClick: function(info){ currentEvent = info.event; showEventDetails(info.event); },
+
+    // optional: week starts Sunday (common in BD)
+    firstDay: 0,
+
+    // ✅ paint BD weekend header red
+    dayHeaderClassNames: function(arg){
+      return BD_WEEKEND_DAYS.includes(arg.date.getDay()) ? ['bd-weekend-header'] : [];
+    },
+
+    // ✅ paint BD weekend day cells red (month/week/day views)
+    dayCellClassNames: function(arg){
+      return isBdWeekend(arg.date) ? ['bd-weekend-cell'] : [];
+    },
+
+    // ✅ block creating meeting on BD weekend
+    dateClick: function(info){
+      if (isBdWeekend(info.date)) {
+        t('warning', 'Weekend (Friday/Saturday) — meeting create করা যাবে না.');
+        return;
+      }
+      openCreateModal(info.dateStr);
+    },
+
+    eventClick: function(info){
+      currentEvent = info.event;
+      showEventDetails(info.event);
+    },
+
     events: [],
+
     eventDidMount: function(info){
       info.el.style.backgroundColor = '#3788d8';
       info.el.style.borderColor = '#3788d8';
@@ -764,6 +823,12 @@ $(function(){
   }
 
   function openCreateModal(dateStr){
+   // ✅ stop if weekend (Fri/Sat)
+    if (dateStr && isBdWeekend(dateStr)) {
+      t('warning', 'Weekend (Friday/Saturday) — meeting create করা যাবে না.');
+      return;
+    }
+
     currentEvent = null;
     $('#meetingModalTitle').text('Create Meeting');
     if (meetingUpdateNoteEl) meetingUpdateNoteEl.style.display = 'none';
@@ -1074,6 +1139,13 @@ $(function(){
   $('#meetingForm').on('submit', function(e){
     e.preventDefault();
     $('#btn-save').prop('disabled', true);
+    const dateVal = $('#date').val();
+    if (isBdWeekend(dateVal)) {
+      t('error', 'Weekend (Friday/Saturday) এ meeting save করা যাবে না.');
+      $('#btn-save').prop('disabled', false);
+      return;
+    }
+    
     const recordId = $('#form_meeting_record_id').val();
     const fd = new FormData();
     fd.append('title', $('#title').val() || '');
