@@ -9,7 +9,7 @@ class AddApprovalFieldsToNoticeTemplatesTable extends Migration
     public function up()
     {
         Schema::table('notice_templates', function (Blueprint $table) {
-            $table->enum('approval_status', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->enum('approval_status', ['pending', 'approved', 'rejected','draft'])->default('pending');
             $table->foreignId('approved_by')->nullable()->constrained('users');
             $table->timestamp('approved_at')->nullable();
         });

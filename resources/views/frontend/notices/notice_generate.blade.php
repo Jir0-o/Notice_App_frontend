@@ -256,91 +256,93 @@
 
   // Get status badge HTML
   function getStatusBadge(status, approvalStatus) {
-    if (approvalStatus === 'pending') {
-      return '<span class="badge bg-warning">Pending Approval</span>';
-    } else if (approvalStatus === 'approved') {
-      return '<span class="badge bg-success">Approved</span>';
-    } else if (approvalStatus === 'rejected') {
-      return '<span class="badge bg-danger">Rejected</span>';
-    } else if (status === 'draft') {
-      return '<span class="badge bg-secondary">Draft</span>';
-    } else if (status === 'published') {
-      return '<span class="badge bg-primary">Published</span>';
-    }
-    return '<span class="badge bg-light text-dark">' + (status || 'Unknown') + '</span>';
+      if (approvalStatus === 'pending') {
+          return '<span class="badge bg-warning">Pending Approval</span>';
+      } else if (approvalStatus === 'approved') {
+          return '<span class="badge bg-success">Approved</span>';
+      } else if (approvalStatus === 'rejected') {
+          return '<span class="badge bg-danger">Rejected</span>';
+      } else if (approvalStatus === 'draft') {
+          return '<span class="badge bg-secondary">Draft</span>';
+      } else if (status === 'published') {
+          return '<span class="badge bg-primary">Published</span>';
+      }
+      return '<span class="badge bg-light text-dark">' + (status || 'Unknown') + '</span>';
   }
 
   // Get action buttons based on user role and notice status
   function getActionButtons(notice) {
-    let buttons = '';
-    const viewUrl = "{{ url('/generate/view/notice') }}/" + encodeURIComponent(notice.id);
-    
-    // View button for everyone
-    buttons += '<a class="btn btn-sm btn-outline-secondary btn-view me-1" href="' + viewUrl + '" target="_blank">View</a>';
-    
-    if (userRole === 'PO') {
-      // PO can edit draft or rejected notices
-      if (notice.status === 'draft' || notice.approval_status === 'rejected') {
-        buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
-      }
-      // PO can delete their own drafts
-      if (notice.status === 'draft') {
-        buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
-      }
-    } 
-    else if (userRole === 'AEPD') {
-      // AEPD can edit any notice
-      buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
+      let buttons = '';
+      const viewUrl = "{{ url('/generate/view/notice') }}/" + encodeURIComponent(notice.id);
       
-      // AEPD can approve/reject pending notices
-      if (notice.approval_status === 'pending') {
-        buttons += '<button type="button" class="btn btn-sm btn-outline-success btn-approve me-1" data-id="' + notice.id + '">Approve</button>';
-        buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-reject" data-id="' + notice.id + '">Reject</button>';
-      } else {
-        buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
+      // View button for everyone
+      buttons += '<a class="btn btn-sm btn-outline-secondary btn-view me-1" href="' + viewUrl + '" target="_blank">View</a>';
+      
+      if (userRole === 'PO') {
+          // PO can edit their own draft notices
+          if (notice.approval_status === 'draft') {
+              buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
+              buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
+          }
+          // PO can edit and resubmit rejected notices
+          else if (notice.approval_status === 'rejected') {
+              buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit & Resubmit</button>';
+          }
+          // PO can view but not edit pending or approved notices
+      } 
+      else if (userRole === 'AEPD') {
+          // AEPD can edit any notice
+          buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
+          
+          // AEPD can approve/reject pending notices (only if created by PO)
+          if (notice.approval_status === 'pending' && notice.user && notice.user.role === 'PO') {
+              buttons += '<button type="button" class="btn btn-sm btn-outline-success btn-approve me-1" data-id="' + notice.id + '">Approve</button>';
+              buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-reject" data-id="' + notice.id + '">Reject</button>';
+          } else {
+              buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
+          }
+      } 
+      else if (userRole === 'Admin' || userRole === 'Super Admin') {
+          // Admin can edit and delete any notice
+          buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
+          buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
       }
-    } 
-    else if (userRole === 'Admin' || userRole === 'Super Admin') {
-      // Admin can edit and delete any notice
-      buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
-      buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
-    }
-    
-    return buttons;
+      
+      return buttons;
   }
 
   // Adjust modal buttons based on user role
   function adjustModalButtons(notice) {
-    const isEditMode = notice && notice.id;
-    
-    if (userRole === 'PO') {
-      if (isEditMode) {
-        if (notice.approval_status === 'pending') {
-          $('#btn-publish').text('Update & Resubmit').removeClass('btn-primary').addClass('btn-warning');
-          $('#btn-save-draft').show();
-        } else if (notice.approval_status === 'rejected') {
-          $('#btn-publish').text('Resubmit for Approval').removeClass('btn-primary').addClass('btn-warning');
-          $('#btn-save-draft').show();
-        } else if (notice.status === 'draft') {
-          $('#btn-publish').text('Submit for Approval').removeClass('btn-primary').addClass('btn-warning');
-          $('#btn-save-draft').show();
-        } else {
-          $('#btn-publish').hide();
-          $('#btn-save-draft').hide();
-        }
+      const isEditMode = notice && notice.id;
+      
+      if (userRole === 'PO') {
+          if (isEditMode) {
+              if (notice.approval_status === 'pending') {
+                  $('#btn-publish').text('Update & Resubmit').removeClass('btn-primary').addClass('btn-warning');
+                  $('#btn-save-draft').hide(); // Can't save draft when pending
+              } else if (notice.approval_status === 'rejected') {
+                  $('#btn-publish').text('Resubmit for Approval').removeClass('btn-primary').addClass('btn-warning');
+                  $('#btn-save-draft').show();
+              } else if (notice.approval_status === 'draft') {
+                  $('#btn-publish').text('Submit for Approval').removeClass('btn-primary').addClass('btn-warning');
+                  $('#btn-save-draft').show();
+              } else if (notice.approval_status === 'approved') {
+                  $('#btn-publish').hide(); // Can't edit approved notices
+                  $('#btn-save-draft').hide();
+              }
+          } else {
+              $('#btn-publish').text('Submit for Approval').removeClass('btn-primary').addClass('btn-warning');
+              $('#btn-save-draft').show();
+          }
       } else {
-        $('#btn-publish').text('Submit for Approval').removeClass('btn-primary').addClass('btn-warning');
-        $('#btn-save-draft').show();
+          if (isEditMode && notice.approval_status === 'approved') {
+              $('#btn-publish').text('Update Published').addClass('btn-primary').removeClass('btn-warning');
+              $('#btn-save-draft').hide();
+          } else {
+              $('#btn-publish').text('Publish').addClass('btn-primary').removeClass('btn-warning');
+              $('#btn-save-draft').show();
+          }
       }
-    } else {
-      if (isEditMode && notice.status === 'published') {
-        $('#btn-publish').text('Update Published').addClass('btn-primary').removeClass('btn-warning');
-        $('#btn-save-draft').hide();
-      } else {
-        $('#btn-publish').text('Publish').addClass('btn-primary').removeClass('btn-warning');
-        $('#btn-save-draft').show();
-      }
-    }
   }
 
   // ---------- Departments ----------
@@ -569,8 +571,16 @@
       $noticesTbody.html('<tr><td colspan="7">Loading...</td></tr>');
       const userRole = window.currentUserRole || localStorage.getItem('user_role') || 'User';
       
-      // All roles use the same endpoint now - filtering happens on server
-      let url = API_BASE + '/notice-templates?page=' + page + '&per_page=' + per_page;
+      // Use different endpoints based on role
+      let url = '';
+      
+      if (userRole === 'AEPD') {
+          // AEPD sees pending approval notices
+          url = API_BASE + '/notice-templates/pending-approval?page=' + page + '&per_page=' + per_page;
+      } else {
+          // PO and Admin see filtered notices via the main endpoint
+          url = API_BASE + '/notice-templates?page=' + page + '&per_page=' + per_page;
+      }
       
       $.get(url)
           .done(function(res){
@@ -1000,7 +1010,7 @@
     submitNotice('publish'); 
   });
 
-  function submitNotice(type){
+function submitNotice(type){
     $('#btn-publish, #btn-save-draft').prop('disabled', true);
     const id = $('#notice_id').val();
     const formData = new FormData();
@@ -1015,22 +1025,28 @@
 
     // Set status based on user role and type
     if (userRole === 'PO') {
-      if (type === 'publish') {
-        // PO submits for approval
-        formData.append('status', 'pending');
-        formData.append('approval_status', 'pending');
-        toastr.info('Notice submitted for approval to AEPD');
-      } else {
-        formData.append('status', 'draft');
-      }
+        if (type === 'publish') {
+            // PO submits for approval (pending status)
+            formData.append('status', 'pending');
+            formData.append('approval_status', 'pending');
+            toastr.info('Notice submitted for approval to AEPD');
+        } else {
+            // PO saves as draft
+            formData.append('status', 'draft');
+            formData.append('approval_status', 'draft'); // Important: draft status for draft
+            toastr.info('Notice saved as draft');
+        }
     } else {
-      // Admin, AEPD, Super Admin can publish directly
-      if (type === 'publish') {
-        formData.append('status', 'published');
-        formData.append('approval_status', 'approved');
-      } else {
-        formData.append('status', 'draft');
-      }
+        // Admin, AEPD, Super Admin can publish directly
+        if (type === 'publish') {
+            formData.append('status', 'published');
+            formData.append('approval_status', 'approved');
+            toastr.success('Notice published successfully');
+        } else {
+            formData.append('status', 'draft');
+            formData.append('approval_status', 'draft');
+            toastr.info('Notice saved as draft');
+        }
     }
 
     // departments
@@ -1062,22 +1078,22 @@
     });
 
     // method spoof on update
-    if (id) formData.append('_method','PUT');
+   if (id) formData.append('_method','PUT');
 
-    const url = id ? API_BASE + '/notice-templates/' + id : API_BASE + '/notice-templates';
-    
-    $.ajax({
+  const url = id ? API_BASE + '/notice-templates/' + id : API_BASE + '/notice-templates';
+  
+  $.ajax({
       url: url,
       method: 'POST',
       data: formData,
       processData: false,
       contentType: false,
       success: function(res){
-        t('Saved','success');
-        const noticeModalEl = document.getElementById('noticeModal');
-        const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null;
-        if (instance) instance.hide(); else $('#noticeModal').hide();
-        loadNotices();
+          t('Saved','success');
+          const noticeModalEl = document.getElementById('noticeModal');
+          const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null;
+          if (instance) instance.hide(); else $('#noticeModal').hide();
+          loadNotices();
       },
       error: function(err){
         console.error('submitNotice failed', err);

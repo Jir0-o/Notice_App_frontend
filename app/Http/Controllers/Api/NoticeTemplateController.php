@@ -25,11 +25,20 @@ class NoticeTemplateController extends Controller
 
         $query = NoticeTemplate::with(['distributions', 'regards', 'user.designation', 'approver']);
 
-        // If user is PO, only show their own notices
+        // Apply role-based filters
         if ($user->hasRole('PO')) {
+            // PO: Only see their own notices
             $query->where('user_id', $user->id);
+        } elseif ($user->hasRole('AEPD')) {
+
+            $query->where('approval_status', 'pending');
+            
+            // If you want AEPD to see all notices, remove the where clause above
+        } elseif ($user->hasRole('Admin') || $user->hasRole('Super Admin')) {
+            // Admin/Super Admin: See only approved/published notices
+            $query->where('approval_status', 'approved')
+                ->where('status', 'published');
         }
-        
 
         $data = $query->latest('id')->paginate($perPage);
 
@@ -59,8 +68,14 @@ class NoticeTemplateController extends Controller
      */
     public function show($id)
     {
-        $tpl = NoticeTemplate::with(['distributions', 'regards', 'user.designation'])
-            ->findOrFail($id);
+        $tpl = NoticeTemplate::with([
+            'distributions', 
+            'regards', 
+            'user.designation', 
+            'user.department',
+            'approver.designation', 
+            'approver.department'
+        ])->findOrFail($id);
 
         // Calculate if the notice has been edited
         $isEdited = !$tpl->created_at->eq($tpl->updated_at);
@@ -111,31 +126,26 @@ class NoticeTemplateController extends Controller
             $status = $validated['status'] ?? 'draft';
             
             // Set approval status based on user role
-            $approvalStatus = 'pending';
+            $approvalStatus = 'draft';
             $approvedBy = null;
             $approvedAt = null;
             
             if ($user->hasRole('PO')) {
-                // PO cannot publish directly, needs AEPD approval
-                $approvalStatus = 'pending';
-                if ($status === 'published') {
-                    $status = 'pending'; // Set to pending for approval
+                // PO: draft = draft, published = pending for approval
+                if ($status === 'published' || $status === 'pending') {
+                    $approvalStatus = 'pending'; // Needs AEPD approval
+                    $status = 'pending'; // Set status to pending
+                } else {
+                    $approvalStatus = 'draft'; // Just a draft, not submitted yet
                 }
-            } elseif ($user->hasRole('AEPD')) {
-                // AEPD can publish directly or approve PO's notices
-                $approvalStatus = 'approved';
-                $approvedBy = $user->id;
-                $approvedAt = now();
+            } elseif ($user->hasRole('AEPD') || $user->hasRole('Admin')) {
+                // AEPD and Admin can publish directly - no approval needed
                 if ($status === 'published') {
                     $approvalStatus = 'approved';
-                }
-            } elseif ($user->hasRole('Admin')) {
-                // Admin can publish directly
-                $approvalStatus = 'approved';
-                $approvedBy = $user->id;
-                $approvedAt = now();
-                if ($status === 'published') {
-                    $approvalStatus = 'approved';
+                    $approvedBy = $user->id; // They self-approve
+                    $approvedAt = now();
+                } else {
+                    $approvalStatus = 'draft'; // Draft status
                 }
             }
 
@@ -205,22 +215,36 @@ class NoticeTemplateController extends Controller
                     if ($validated['status'] === 'published') {
                         $parentUpdates['status'] = 'pending';
                         $parentUpdates['approval_status'] = 'pending';
+                        // Clear any previous approval when PO resubmits
+                        $parentUpdates['approved_by'] = null;
+                        $parentUpdates['approved_at'] = null;
                     } else {
                         $parentUpdates['status'] = $validated['status'];
                     }
-                } elseif ($user->hasRole('AEPD') && $tpl->approval_status === 'pending') {
-                    // AEPD can approve PO's pending notices
-                    if ($validated['status'] === 'published') {
-                        $parentUpdates['approval_status'] = 'approved';
-                        $parentUpdates['approved_by'] = $user->id;
-                        $parentUpdates['approved_at'] = now();
-                        $parentUpdates['status'] = 'published';
+                } elseif ($user->hasRole('AEPD')) {
+                    // AEPD can approve PO's notices OR publish their own
+                    if ($tpl->approval_status === 'pending') {
+                        // Approving a PO's notice
+                        if ($validated['status'] === 'published') {
+                            $parentUpdates['approval_status'] = 'approved';
+                            $parentUpdates['approved_by'] = $user->id; // AEPD approves
+                            $parentUpdates['approved_at'] = now();
+                            $parentUpdates['status'] = 'published';
+                        }
+                    } else {
+                        // AEPD editing their own or others' notices
+                        if ($validated['status'] === 'published') {
+                            $parentUpdates['approval_status'] = 'approved';
+                            $parentUpdates['approved_by'] = $user->id; // Self-approve
+                            $parentUpdates['approved_at'] = now();
+                        }
+                        $parentUpdates['status'] = $validated['status'];
                     }
-                } elseif ($user->hasRole('Admin') || $user->hasRole('AEPD')) {
-                    // Admin/AEPD can publish directly
+                } elseif ($user->hasRole('Admin')) {
+                    // Admin can publish directly (self-approve)
                     if ($validated['status'] === 'published') {
                         $parentUpdates['approval_status'] = 'approved';
-                        $parentUpdates['approved_by'] = $user->id;
+                        $parentUpdates['approved_by'] = $user->id; // Self-approve
                         $parentUpdates['approved_at'] = now();
                     }
                     $parentUpdates['status'] = $validated['status'];
@@ -309,6 +333,8 @@ class NoticeTemplateController extends Controller
      */
     public function pendingApproval(Request $request)
     {
+        $perPage = (int) $request->get('per_page', 10);
+
         $user = $request->user();
 
         if (!$user->hasRole('AEPD')) {
@@ -318,8 +344,8 @@ class NoticeTemplateController extends Controller
         $notices = NoticeTemplate::with(['user.designation', 'distributions', 'regards'])
             ->where('approval_status', 'pending')
             ->latest()
-            ->paginate(10);
-
+            ->paginate($perPage);
+            
         return response()->json($notices);
     }
 
@@ -451,16 +477,25 @@ class NoticeTemplateController extends Controller
             'subject'         => $template->subject,
             'body'            => $template->body,
 
-            // signature (name from user, extra body from template)
-            'sign_name'       => $template->user->name ?? '',
-            'sign_designation'=> optional($template->user->designation)->name,
+            // Only show signature if notice is approved by AEPD
+            // If not approved, show blank or PO's signature details as empty
+            'sign_name'       => $template->approval_status === 'approved' && $template->approver 
+                                ? $template->approver->name 
+                                : '',
+            'sign_designation'=> $template->approval_status === 'approved' && $template->approver 
+                                ? optional($template->approver->designation)->name 
+                                : '',
             'signature_body'  => $template->signature_body ?? '',
 
-            // approver signature (if approved by AEPD)
+            // approver info for display
             'approver_name'   => $template->approver->name ?? null,
             'approver_designation' => optional($template->approver->designation)->name ?? null,
             'approval_status' => $template->approval_status,
             'approved_at'     => $template->approved_at ? $template->approved_at->format('d/m/Y') : null,
+            
+            // creator info (for reference only)
+            'creator_name'    => $template->user->name ?? null,
+            'creator_designation' => optional($template->user->designation)->name ?? null,
 
             // lists
             'distributions'   => $template->distributions,

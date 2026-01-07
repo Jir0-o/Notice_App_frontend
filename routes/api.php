@@ -88,6 +88,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users/select2', [MeetingDetailController::class, 'chairUsersSelect2']);
 });
 
+Route::middleware(['role:Admin|AEPD'])->group(function () {
+    Route::post('/notice-templates/{id}/approve', [NoticeTemplateController::class, 'approve']);
+    Route::post('/notice-templates/{id}/reject', [NoticeTemplateController::class, 'reject']);
+    Route::get('notice-templates/pending-approval', [NoticeTemplateController::class, 'pendingApproval']);
+});
 // All routes accessible to Admin, PO, and AEPD
 Route::middleware(['role:Admin|PO|AEPD'])->group(function () {
     // for meeting
@@ -109,12 +114,6 @@ Route::middleware(['role:Admin|PO|AEPD'])->group(function () {
     Route::get('/meetings/conflicts/user', [MeetingAvailabilityController::class, 'checkUser'])->name('meetings.conflicts.user');
 });
 
-// Routes only for Admin and AEPD (separate group)
-Route::middleware(['role:Admin|AEPD'])->group(function () {
-    Route::post('/notice-templates/{id}/approve', [NoticeTemplateController::class, 'approve']);
-    Route::post('/notice-templates/{id}/reject', [NoticeTemplateController::class, 'reject']);
-    Route::get('/notice-templates/pending-approval', [NoticeTemplateController::class, 'pendingApproval']);
-});
 
 // Route for PO to see their own notices
 Route::middleware(['role:PO'])->group(function () {

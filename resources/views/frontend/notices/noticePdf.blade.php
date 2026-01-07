@@ -25,6 +25,20 @@
   .list{ margin-left:22px; } .list p{ margin:6px 0; }
   .muted{ color:#6b7280; font-size:.95rem; }
   .loading-overlay{ text-align:center; padding:18px 10px; }
+  
+  /* Approval status badges */
+  .approval-status { float: right; margin-top: -40px; }
+  .status-badge { 
+    padding: 4px 12px; 
+    border-radius: 4px; 
+    font-size: 12px; 
+    font-weight: bold;
+  }
+  .status-approved { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+  .status-pending { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+  .status-draft { background-color: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; }
+  .status-rejected { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+  
   /* download button */
   #btn-download{ padding:.4rem .6rem; border:1px solid #ccc; background:#fff; border-radius:6px; cursor:pointer; font-size:0.9rem; }
   
@@ -37,6 +51,25 @@
     padding: 10px;
     border: 1px solid red;
     background-color: #fff8f8;
+  }
+  
+  /* No signature message */
+  .no-signature {
+    text-align: right;
+    color: #666;
+    font-style: italic;
+    margin-top: 60px;
+    padding: 10px;
+    border-top: 1px dashed #ccc;
+  }
+  
+  /* Creator info for PO notices */
+  .creator-info {
+    text-align: left;
+    color: #666;
+    font-size: 0.9rem;
+    margin-top: 10px;
+    padding: 5px;
   }
   
   @media (max-width:860px){ 
@@ -80,6 +113,9 @@
     <div id="loading" class="loading-overlay muted">Loading notice…</div>
     <div id="loadError" class="loading-overlay" style="display:none;color:#b02a37;"></div>
 
+    {{-- Approval status badge --}}
+    <div id="approvalStatusBadge" class="approval-status" style="display:none;"></div>
+
     {{-- meta: memorial no & date --}}
     <div class="meta" id="metaBlock" style="display:none;">
       <div><strong>নং:</strong> <span id="memorialNo">-</span></div>
@@ -92,6 +128,9 @@
     {{-- body: allow HTML (Quill output) --}}
     <div class="para" id="noticeBody" style="display:none;"></div>
 
+    {{-- Creator info (for PO notices) --}}
+    <div id="creatorInfo" class="creator-info" style="display:none;"></div>
+
     {{-- signature block --}}
     <div class="signature" role="note" id="signatureBlock" style="display:none;">
       <div class="sig-block" aria-hidden="true">
@@ -103,6 +142,11 @@
         <p id="sigDepartment"></p>
         <div id="sigExtra"></div>
       </div>
+    </div>
+
+    {{-- No signature message (for pending PO notices) --}}
+    <div id="noSignatureMessage" class="no-signature" style="display:none;">
+      <!-- Message will be inserted here -->
     </div>
 
     {{-- Distributions --}}
@@ -139,6 +183,26 @@
       $('#loadError').text(msg).show();
       if (window.toastr) toastr.error(msg);
     }
+
+    // function getStatusBadgeClass(status) {
+    //   switch(status) {
+    //     case 'approved': return 'status-approved';
+    //     case 'pending': return 'status-pending';
+    //     case 'draft': return 'status-draft';
+    //     case 'rejected': return 'status-rejected';
+    //     default: return 'status-draft';
+    //   }
+    // }
+
+    // function getStatusText(status) {
+    //   switch(status) {
+    //     case 'approved': return 'অনুমোদিত';
+    //     case 'pending': return 'অনুমোদনের অপেক্ষায়';
+    //     case 'draft': return 'খসড়া';
+    //     case 'rejected': return 'প্রত্যাখ্যাত';
+    //     default: return 'অজানা';
+    //   }
+    // }
 
     function formatBanglaDate(iso){
       if(!iso) return '';
@@ -191,25 +255,74 @@
         $('#editedNoticeBlock').html(message).show();
       }
 
-      // signature / user info
-      const user = template.user || null;
-      const rawSigPath = (user && (user.signature_path || user.photo || user.avatar)) || null;
-      const sigImageUrl = makeAbsUrl(rawSigPath);
-
-      if (sigImageUrl) {
-        $('#sigImage').attr('src', sigImageUrl).show();
-        $('#sigFallback').hide();
-      } else {
-        $('#sigImage').hide();
-        $('#sigFallback').show();
+      // Determine which signature to show based on approval status and creator role
+      let signer = null;
+      let signerType = 'none';
+      
+      if (template.approval_status === 'approved' && template.approver) {
+        // Approved notice: show approver's signature (for PO notices approved by AEPD)
+        signer = template.approver;
+        signerType = 'approver';
+      } else if (template.approval_status === 'approved' && !template.approver) {
+        // Self-approved notice (Admin/AEPD created and published directly)
+        signer = template.user; // Show creator's signature
+        signerType = 'creator';
       }
 
-      $('#sigName').text(user?.name || template.user_name || '-');
-      $('#sigDesignation').text(user?.designation?.name || template.signature_designation || '');
-      $('#sigDepartment').text(user?.department?.name || template.user_department || '');
+      // Show signature if we have a signer
+      if (signer && signerType !== 'none') {
+        const rawSigPath = (signer && (signer.signature_path || signer.photo || signer.avatar)) || null;
+        const sigImageUrl = makeAbsUrl(rawSigPath);
 
-      // Normalize signature text (trim & collapse)
-      $('#sigExtra').html(normalizeSignatureHtml(template.signature_body || ''));
+        if (sigImageUrl) {
+          $('#sigImage').attr('src', sigImageUrl).show();
+          $('#sigFallback').hide();
+        } else {
+          $('#sigImage').hide();
+          $('#sigFallback').show();
+        }
+
+        $('#sigName').text(signer?.name || '-');
+        $('#sigDesignation').text(signer?.designation?.name || '');
+        $('#sigDepartment').text(signer?.department?.name || '');
+
+        // Normalize signature text (trim & collapse)
+        $('#sigExtra').html(normalizeSignatureHtml(template.signature_body || ''));
+
+        // Show the signature block
+        $('#signatureBlock').show();
+        $('#noSignatureMessage').hide();
+        $('#creatorInfo').hide();
+        
+        // Show approval info for approved PO notices
+        if (signerType === 'approver' && template.approved_at) {
+          const approvedDate = formatBanglaDate(template.approved_at);
+        }
+      } else {
+        // Hide signature block for non-approved notices
+        $('#signatureBlock').hide();
+        
+        // Show appropriate message
+        let message = '';
+        if (template.approval_status === 'pending') {
+          message = 'অনুমোদনের অপেক্ষায় - স্বাক্ষর প্রযোজ্য নয়';
+          // Show creator info for PO pending notices
+          if (template.user) {
+            $('#creatorInfo').html(
+              `প্রস্তুতকারী: ${template.user.name} ` +
+              (template.user.designation?.name ? `(${template.user.designation.name})` : '')
+            ).show();
+          }
+        } else if (template.approval_status === 'draft') {
+          message = 'খসড়া নোটিস - স্বাক্ষর প্রযোজ্য নয়';
+        } else if (template.approval_status === 'rejected') {
+          message = 'প্রত্যাখ্যাত নোটিস - স্বাক্ষর প্রযোজ্য নয়';
+        } else {
+          message = 'স্বাক্ষর প্রযোজ্য নয়';
+        }
+        
+        $('#noSignatureMessage').html(message).show();
+      }
 
       // distributions
       const dList = $('#distributionsList').empty();
@@ -244,7 +357,7 @@
 
       $('#loading').hide();
       $('#loadError').hide();
-      $('#metaBlock, #noticeTitle, #noticeBody, #signatureBlock').show();
+      $('#metaBlock, #noticeTitle, #noticeBody').show();
     }
 
     function fetchTemplate(){
@@ -260,33 +373,10 @@
       const headers = { 'X-Requested-With': 'XMLHttpRequest' };
       if (token) headers['Authorization'] = 'Bearer ' + token;
 
-      // Try to fetch the enhanced view data first, fallback to regular show
+      // Fetch with all necessary relationships
       $.ajax({
-        url: API_BASE + '/notice-templates/' + encodeURIComponent(templateId) + '/view',
-        method: 'GET',
-        headers: headers,
-        success: function(res){
-          if (!res || (typeof res !== 'object')) {
-            // Fallback to regular endpoint
-            fetchRegularTemplate();
-            return;
-          }
-          render(res);
-        },
-        error: function() {
-          // Fallback to regular endpoint
-          fetchRegularTemplate();
-        }
-      });
-    }
-
-    function fetchRegularTemplate() {
-      const token = localStorage.getItem('api_token') || null;
-      const headers = { 'X-Requested-With': 'XMLHttpRequest' };
-      if (token) headers['Authorization'] = 'Bearer ' + token;
-
-      $.ajax({
-        url: API_BASE + '/notice-templates/' + encodeURIComponent(templateId),
+        url: API_BASE + '/notice-templates/' + encodeURIComponent(templateId) + 
+             '?include=user.designation,user.department,approver.designation,approver.department',
         method: 'GET',
         headers: headers,
         success: function(res){
@@ -294,26 +384,6 @@
             showError('Invalid response from server.');
             return;
           }
-          
-          // Calculate is_edited if not provided by API
-          if (res.created_at && res.updated_at) {
-            const created = new Date(res.created_at);
-            const updated = new Date(res.updated_at);
-            res.is_edited = created.getTime() !== updated.getTime();
-            res.created_at_formatted = new Date(res.created_at).toLocaleDateString('bn-BD');
-            res.updated_at_formatted = new Date(res.updated_at).toLocaleDateString('bn-BD');
-          }
-          
-          // Format date to Bangla if date_bn not provided
-          if (res.date && !res.date_bn) {
-            const d = new Date(res.date);
-            const bnDigits = s => String(s).replace(/\d/g, c => '০১২৩৪৫৬৭৮৯'[c]);
-            const day = d.getDate().toString().padStart(2, '0');
-            const month = (d.getMonth() + 1).toString().padStart(2, '0');
-            const year = d.getFullYear();
-            res.date_bn = bnDigits(`${day}/${month}/${year}`);
-          }
-          
           render(res);
         },
         error: function(xhr){
