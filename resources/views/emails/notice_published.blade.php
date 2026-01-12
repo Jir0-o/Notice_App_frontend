@@ -70,7 +70,7 @@
 
                   <span>
                     <strong>Published:</strong>
-                    {{ \Carbon\Carbon::parse($notice->updated_at)->format('F j, Y, g:i a') }}
+                    {{ \Carbon\Carbon::parse($notice->updated_at)->timezone('Asia/Dhaka')->format('F j, Y, g:i a') }}
                   </span>
                 </div>
 

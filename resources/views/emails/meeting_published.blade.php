@@ -14,10 +14,10 @@
   </div>
 
   @php
-    $dateText  = \Carbon\Carbon::parse($meeting->date)->format('F j, Y');
-    $startText = \Carbon\Carbon::parse($meeting->start_time)->format('g:i a');
-    $endText   = \Carbon\Carbon::parse($meeting->end_time)->format('g:i a');
-    $pubText   = \Carbon\Carbon::parse($meeting->updated_at)->format('F j, Y, g:i a');
+    $dateText  = \Carbon\Carbon::parse($meeting->date)->timezone('Asia/Dhaka')->format('F j, Y');
+    $startText = \Carbon\Carbon::parse($meeting->start_time)->timezone('Asia/Dhaka')->format('g:i a');
+    $endText   = \Carbon\Carbon::parse($meeting->end_time)->timezone('Asia/Dhaka')->format('g:i a');
+    $pubText   = \Carbon\Carbon::parse($meeting->updated_at)->timezone('Asia/Dhaka')->format('F j, Y, g:i a');
 
     // OPTIONAL: if you have these fields, they'll show; otherwise ignored
     $location  = $meeting->location ?? $meeting->room_name ?? null;
