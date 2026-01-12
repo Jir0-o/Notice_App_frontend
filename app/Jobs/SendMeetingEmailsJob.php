@@ -28,6 +28,7 @@ class SendMeetingEmailsJob implements ShouldQueue
 
     public function handle()
     {
+        Log::debug("Here");
         $meetingDetails = MeetingDetail::with('propagations.user')->find($this->meetingDetailsId);
 
         if (!$meetingDetails) {
@@ -93,6 +94,8 @@ class SendMeetingEmailsJob implements ShouldQueue
                 Log::error("Failed to fetch FCM access token.", ['response' => $token]);
                 return null;
             }
+
+            Log::debug("FCM access token fetched successfully.". " Expires in {$token['expires_in']} seconds.");
 
             return $token['access_token'];
         } catch (\Throwable $e) {
