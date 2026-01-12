@@ -173,13 +173,28 @@
       });
     }
 
+    function stripHtml(html){
+      // converts HTML -> plain text (removes tags)
+      return $('<div>').html(html || '').text();
+    }
+    function esc(s){
+      // safe escape before injecting into template string
+      return $('<div>').text(s || '').html();
+    }
+    function truncate(s, max = 140){
+      s = (s || '').replace(/\s+/g, ' ').trim();
+      return s.length > max ? s.slice(0, max - 1) + '…' : s;
+    }
+
     function loadNotifications(){
       if (!token) {
         $('#notifList').html('<div class="px-3 py-2 text-muted small">Please login</div>');
         return;
       }
+
       const $list = $('#notifList');
       $list.html('<div class="px-3 py-2 text-muted small">Loading...</div>');
+
       $.ajax({
         url: API_BASE + '/api/notifications?only=all&per_page=10',
         method: 'GET',
@@ -190,11 +205,15 @@
             $list.html('<div class="px-3 py-2 text-muted small">No notifications.</div>');
             return;
           }
+
           $list.empty();
+
           items.forEach(n => {
             const readClass = n.read_at ? 'text-muted' : 'fw-bold';
-            const title = $('<div>').text(n.title || 'Untitled').html();
-            const excerpt = $('<small>').text(n.excerpt || '').html();
+
+            const title   = esc(n.title || 'Untitled');
+            const excerpt = esc(truncate(stripHtml(n.excerpt || ''), 160));
+
             const li = $(`
               <div class="list-group-item d-flex justify-content-between align-items-start ${readClass}" data-id="${n.id}" style="cursor:pointer;">
                 <div>
@@ -207,6 +226,7 @@
                 </div>
               </div>
             `);
+
             $list.append(li);
           });
         },

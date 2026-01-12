@@ -269,7 +269,7 @@
       }
       return '<span class="badge bg-light text-dark">' + (status || 'Unknown') + '</span>';
   }
-
+ 
   // Get action buttons based on user role and notice status
   function getActionButtons(notice) {
       let buttons = '';

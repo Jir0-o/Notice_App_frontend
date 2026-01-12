@@ -210,18 +210,23 @@ class NoticeTemplateController extends Controller
             $parentUpdates = [];
             
             if (isset($validated['status'])) {
+                $requested = $validated['status'];
+
                 if ($user->hasRole('PO')) {
-                    // PO can only save as draft or submit for approval
-                    if ($validated['status'] === 'published') {
+                    // PO: only draft OR submit-for-approval (pending)
+                    if (in_array($requested, ['pending', 'published'], true)) {
                         $parentUpdates['status'] = 'pending';
                         $parentUpdates['approval_status'] = 'pending';
-                        // Clear any previous approval when PO resubmits
                         $parentUpdates['approved_by'] = null;
                         $parentUpdates['approved_at'] = null;
                     } else {
-                        $parentUpdates['status'] = $validated['status'];
+                        // draft (or anything else -> draft)
+                        $parentUpdates['status'] = 'draft';
+                        $parentUpdates['approval_status'] = 'draft';
+                        $parentUpdates['approved_by'] = null;
+                        $parentUpdates['approved_at'] = null;
                     }
-                } elseif ($user->hasRole('AEPD')) {
+                }elseif ($user->hasRole('AEPD')) {
                     // AEPD can approve PO's notices OR publish their own
                     if ($tpl->approval_status === 'pending') {
                         // Approving a PO's notice
