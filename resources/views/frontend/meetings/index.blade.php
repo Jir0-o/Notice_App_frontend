@@ -355,21 +355,11 @@ $(function(){
   calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: 'dayGridMonth',
     height: 'auto',
-
-    // optional: week starts Sunday (common in BD)
     firstDay: 0,
 
-    // ✅ paint BD weekend header red
-    dayHeaderClassNames: function(arg){
-      return BD_WEEKEND_DAYS.includes(arg.date.getDay()) ? ['bd-weekend-header'] : [];
-    },
+    dayHeaderClassNames: arg => BD_WEEKEND_DAYS.includes(arg.date.getDay()) ? ['bd-weekend-header'] : [],
+    dayCellClassNames:   arg => isBdWeekend(arg.date) ? ['bd-weekend-cell'] : [],
 
-    // ✅ paint BD weekend day cells red (month/week/day views)
-    dayCellClassNames: function(arg){
-      return isBdWeekend(arg.date) ? ['bd-weekend-cell'] : [];
-    },
-
-    // ✅ block creating meeting on BD weekend
     dateClick: function(info){
       if (isBdWeekend(info.date)) {
         t('warning', 'Weekend (Friday/Saturday) — meeting create করা যাবে না.');
@@ -383,6 +373,12 @@ $(function(){
       showEventDetails(info.event);
     },
 
+    datesSet: function(info){
+      const start = ymd(info.start); // visible start
+      const end   = ymd(info.end);   // visible end (exclusive)
+      fetchMeetings(start, end).then(loadEventsToCalendar);
+    },
+
     events: [],
 
     eventDidMount: function(info){
@@ -393,25 +389,38 @@ $(function(){
   });
   calendar.render();
 
-  function fetchMeetings(){
-    return $.get(`${API_BASE}/meetings-details?include=true`)
+
+  function ymd(d){
+  // local date => YYYY-MM-DD (no UTC shift)
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+  function fetchMeetings(startDate, endDate){
+    const params = { include: true };
+
+    if (startDate && endDate) {
+      params.start = startDate; // YYYY-MM-DD
+      params.end   = endDate;   // YYYY-MM-DD (exclusive ok)
+    }
+
+    return $.get(`${API_BASE}/meetings-details`, params)
       .then(res => {
-        let payload = res;
-        if (payload && typeof payload === 'object' && Array.isArray(payload.data)) {
-          payload = payload.data;
-        } else if (payload && typeof payload === 'object' && payload.data && Array.isArray(payload.data.data)) {
-          payload = payload.data.data;
-        }
+        let payload = res?.data ?? res;      // supports both {data:[]} or plain []
+        if (Array.isArray(res?.data?.data)) payload = res.data.data;
+
+        // if your backend returns {success:true,data:[...]}
+        if (Array.isArray(res?.data)) payload = res.data;
+        if (Array.isArray(res?.data?.data)) payload = res.data.data;
+        if (Array.isArray(res?.data?.data?.data)) payload = res.data.data.data;
+
+        if (!Array.isArray(payload)) payload = res?.data ?? res?.data?.data ?? [];
+        if (!Array.isArray(payload)) payload = res?.data ?? [];
         if (!Array.isArray(payload)) payload = [];
-        const clean = payload.filter(it => {
-          const d  = it?.date;
-          const st = it?.start_time;
-          const et = it?.end_time;
-          const okDate = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
-          const okTime = t => typeof t === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(t);
-          return okDate && okTime(st || '') && okTime(et || '');
-        });
-        return clean;
+
+        return payload;
       })
       .catch(() => {
         t('error','Could not fetch meetings');
@@ -964,7 +973,7 @@ $(function(){
             .done(() => {
               t('success', 'Deleted');
               if (eventDetailsModal) eventDetailsModal.hide();
-              fetchMeetings().then(loadEventsToCalendar);
+              reloadMeetingsForView();
             })
             .fail(() => t('error','Delete failed'));
         });
@@ -1197,7 +1206,7 @@ $(function(){
       if (ok) {
         t('success', res.message || 'Saved');
         if (meetingModal) meetingModal.hide();
-        fetchMeetings().then(loadEventsToCalendar);
+        reloadMeetingsForView();
       } else {
         t('error', res?.message || 'Failed');
       }
@@ -1224,7 +1233,7 @@ $(function(){
         .done(() => {
           t('success', 'Deleted');
           if (meetingModal) meetingModal.hide();
-          fetchMeetings().then(loadEventsToCalendar);
+          reloadMeetingsForView();
         }).fail(() => t('error', 'Delete failed'));
     });
   });
@@ -1233,14 +1242,22 @@ $(function(){
     currentEvent = null;
   });
 
-  function reloadAll(){
-    Promise.all([fetchDepartments(), fetchMeetings()])
-      .then(([_, meetings]) => {
-        loadEventsToCalendar(meetings);
-      })
-      .catch(() => {});
+  function reloadMeetingsForView(){
+    const v = calendar.view;
+    return fetchMeetings(ymd(v.activeStart), ymd(v.activeEnd)).then(loadEventsToCalendar);
   }
-  $('#btn-refresh').on('click', reloadAll);
+
+  function reloadAll(){
+    return Promise.all([fetchDepartments(), reloadMeetingsForView()]).catch(() => {});
+  }
+
+  // boot
+  reloadAll();
+
+  $('#btn-refresh').on('click', function(){
+    const v = calendar.view;
+    fetchMeetings(ymd(v.activeStart), ymd(v.activeEnd)).then(loadEventsToCalendar);
+  });
 
   // boot
   reloadAll();

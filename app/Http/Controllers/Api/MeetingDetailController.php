@@ -43,22 +43,31 @@ class MeetingDetailController extends Controller
 			$q->where('title', 'like', "%{$s}%");
 		}
 
-		// Optional meeting_id filter
 		if ($mid = $request->query('meeting_id')) {
 			$q->where('meeting_id', (int) $mid);
 		}
 
-		// Date range on new 'date' column
-		$from = $request->query('date_from');
-		$to   = $request->query('date_to');
 
-		if ($from && $to) {
-			$q->whereDate('date', '>=', $from)
-			->whereDate('date', '<=', $to);
-		} elseif ($from) {
-			$q->whereDate('date', '>=', $from);
-		} elseif ($to) {
-			$q->whereDate('date', '<=', $to);
+		// FullCalendar "end" is EXCLUSIVE, so use < end
+		$fcStart = $request->query('start'); // YYYY-MM-DD
+		$fcEnd   = $request->query('end');   // YYYY-MM-DD (exclusive)
+
+		if ($fcStart && $fcEnd) {
+			$q->whereDate('date', '>=', $fcStart)
+			->whereDate('date', '<',  $fcEnd);
+		} else {
+			// Existing date range filters (list screens)
+			$from = $request->query('date_from');
+			$to   = $request->query('date_to');
+
+			if ($from && $to) {
+				$q->whereDate('date', '>=', $from)
+				->whereDate('date', '<=', $to);
+			} elseif ($from) {
+				$q->whereDate('date', '>=', $from);
+			} elseif ($to) {
+				$q->whereDate('date', '<=', $to);
+			}
 		}
 
 		// Upcoming / Past using (date, start_time)
@@ -93,13 +102,8 @@ class MeetingDetailController extends Controller
 		}
 		$q->orderBy($col, $dir);
 
-		// Stable secondary sort for deterministic ordering
-		if ($col !== 'date') {
-			$q->orderBy('date', 'asc');
-		}
-		if ($col !== 'start_time') {
-			$q->orderBy('start_time', 'asc');
-		}
+		if ($col !== 'date')       $q->orderBy('date', 'asc');
+		if ($col !== 'start_time') $q->orderBy('start_time', 'asc');
 
 		// ---- Includes ----
 		$include = (string) $request->query('include');
@@ -109,7 +113,6 @@ class MeetingDetailController extends Controller
 		if (str_contains($include, 'meeting')) {
 			$q->with('meeting:id,title,capacity,is_active');
 		}
-
 		if (str_contains($include, 'meetingChair')) {
 			$q->with('meetingChair:id,name,email');
 		}
@@ -117,16 +120,30 @@ class MeetingDetailController extends Controller
 		// Counts
 		$q->withCount('propagations', 'meetingAttachments');
 
-		// ---- Pagination ----
+
+		if ($fcStart && $fcEnd) {
+			$rows = $q->get();
+
+			return response()->json([
+				'data'  => \App\Http\Resources\MeetingDetailResource::collection($rows),
+				'ok'    => true,
+				'mode'  => 'range',
+				'range' => ['start' => $fcStart, 'end' => $fcEnd],
+				'total' => $rows->count(),
+				'sort'    => $sort,
+				'include' => $include,
+			]);
+		}
+
+		// ---- Pagination (list mode) ----
 		$perPage   = (int) $request->query('per_page', 15);
 		$page      = (int) $request->query('page', 1);
-		$paginator = $q->paginate($perPage, ['*'], 'page', $page)
-					->appends($request->query());
+		$paginator = $q->paginate($perPage, ['*'], 'page', $page)->appends($request->query());
 
-		// ---- Flat response (no nested meta) ----
 		return response()->json([
 			'data'  => \App\Http\Resources\MeetingDetailResource::collection($paginator->items()),
 			'ok'    => true,
+			'mode'  => 'paginate',
 
 			'links' => [
 				'first' => $paginator->url(1),
@@ -141,19 +158,19 @@ class MeetingDetailController extends Controller
 			'total'        => $paginator->total(),
 			'last_page'    => $paginator->lastPage(),
 
-			// Echo filters/sort/include at top level
 			'filters' => [
-				'search'    => $request->query('search'),
-				'meeting_id'=> $request->query('meeting_id'),
-				'date_from' => $from,
-				'date_to'   => $to,
-				'upcoming'  => $request->query('upcoming'),
-				'past'      => $request->query('past'),
+				'search'     => $request->query('search'),
+				'meeting_id' => $request->query('meeting_id'),
+				'date_from'  => $request->query('date_from'),
+				'date_to'    => $request->query('date_to'),
+				'upcoming'   => $request->query('upcoming'),
+				'past'       => $request->query('past'),
 			],
 			'sort'    => $sort,
 			'include' => $include,
 		]);
 	}
+
 
 	public function chairUsersSelect2(Request $request)
 	{
