@@ -31,4 +31,9 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'firebase' => [
+        'credentials' => env('FIREBASE_CREDENTIALS'), // full path to service-account json
+        'project_id'  => env('FIREBASE_PROJECT_ID', 'sicip-push-notification'),
+    ],
+
 ];

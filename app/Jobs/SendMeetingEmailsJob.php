@@ -3,23 +3,22 @@
 namespace App\Jobs;
 
 use App\Mail\MeetingPublishedMail;
-use App\Models\Meeting;
 use App\Models\MeetingDetail;
+use Google\Client as GoogleClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
-use Google\Client as GoogleClient;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class SendMeetingEmailsJob implements ShouldQueue
 {
     use InteractsWithQueue, Queueable, SerializesModels;
 
     public int $meetingDetailsId;
-    public ?array $propagationIds; // optional subset
+    public ?array $propagationIds;
 
     public function __construct(int $meetingDetailsId, ?array $propagationIds = null)
     {
@@ -29,7 +28,9 @@ class SendMeetingEmailsJob implements ShouldQueue
 
     public function handle()
     {
+        Log::debug("Here");
         $meetingDetails = MeetingDetail::with('propagations.user')->find($this->meetingDetailsId);
+
         if (!$meetingDetails) {
             Log::warning("Meeting not found in SendMeetingEmailsJob: {$this->meetingDetailsId}");
             return;
@@ -43,6 +44,7 @@ class SendMeetingEmailsJob implements ShouldQueue
 
         foreach ($propagations as $prop) {
             $email = $prop->user_email;
+
             if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 Log::warning("Invalid email skipped: {$email}");
                 continue;
@@ -50,16 +52,21 @@ class SendMeetingEmailsJob implements ShouldQueue
 
             $recipientName = $prop->name ?: ($prop->user?->name ?? null);
 
-            Log::debug( $meetingDetails->title);
-
-            try {
-                if ($prop->user && $prop->user->fcm_token) {
+            // 1) Push notification (never block email if push fails)
+            if ($prop->user && $prop->user->fcm_token) {
+                try {
                     $this->sendFcmNotification(
                         $prop->user->fcm_token,
                         'New Meeting Published',
                         $meetingDetails->title
                     );
+                } catch (\Throwable $e) {
+                    Log::error("FCM push failed for {$email}: " . $e->getMessage());
                 }
+            }
+
+            // 2) Email send
+            try {
                 Mail::to($email)->send(new MeetingPublishedMail($meetingDetails, $recipientName));
             } catch (\Throwable $e) {
                 Log::error("Failed to send meeting email to {$email}: " . $e->getMessage());
@@ -67,24 +74,46 @@ class SendMeetingEmailsJob implements ShouldQueue
         }
     }
 
-    private function getFcmAccessToken()
+    private function getFcmAccessToken(): ?string
     {
-        $client = new GoogleClient();
-        $client->setAuthConfig(env('FIREBASE_CREDENTIALS'));
-        $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+        $credentials = config('services.firebase.credentials');
 
-        $accessToken = $client->fetchAccessTokenWithAssertion();
-        return $accessToken['access_token'];
+        if (!$credentials) {
+            Log::error("FIREBASE_CREDENTIALS is missing (config/services.php).");
+            return null;
+        }
+
+        try {
+            $client = new GoogleClient();
+            $client->setAuthConfig($credentials); // path string OR decoded array both work
+            $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+
+            $token = $client->fetchAccessTokenWithAssertion();
+
+            if (!is_array($token) || empty($token['access_token'])) {
+                Log::error("Failed to fetch FCM access token.", ['response' => $token]);
+                return null;
+            }
+
+            Log::debug("FCM access token fetched successfully.". " Expires in {$token['expires_in']} seconds.");
+
+            return $token['access_token'];
+        } catch (\Throwable $e) {
+            Log::error("FCM auth exception: " . $e->getMessage());
+            return null;
+        }
     }
 
-    private function sendFcmNotification($token, $title, $body)
+    private function sendFcmNotification(string $token, string $title, string $body): void
     {
-        if (!$token) {
+        $accessToken = $this->getFcmAccessToken();
+        if (!$accessToken) {
+            // Don’t throw, just log and exit
+            Log::warning("Skipping FCM push: access token not available.");
             return;
         }
 
-        $accessToken = $this->getFcmAccessToken();
-        $projectId = 'sicip-push-notification';
+        $projectId = config('services.firebase.project_id', 'sicip-push-notification');
         $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
 
         $message = [
@@ -97,12 +126,19 @@ class SendMeetingEmailsJob implements ShouldQueue
                 'data' => [
                     'payload' => json_encode([
                         'screen' => 'home',
-                        'id' => $this->meetingDetailsId,
+                        'id' => (string) $this->meetingDetailsId,
                     ]),
                 ],
             ],
         ];
 
-        Http::withToken($accessToken)->post($url, $message);
+        $res = Http::withToken($accessToken)->post($url, $message);
+
+        if (!$res->successful()) {
+            Log::error("FCM send failed", [
+                'status' => $res->status(),
+                'body' => $res->body(),
+            ]);
+        }
     }
 }
