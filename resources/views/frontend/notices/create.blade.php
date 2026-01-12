@@ -523,7 +523,7 @@
           fd.append(`external_users[${i}][email]`, u.email);
         });
         selectedFiles.forEach((f, i) => fd.append(`attachments[${i}]`, f));
-
+ 
         const url = isDraft ? `${API}/notices/draft` : `${API}/notices`;
         const $btn = isDraft ? $('#saveDraft') : $('#publishBtn');
         const originalText = $btn.text();
