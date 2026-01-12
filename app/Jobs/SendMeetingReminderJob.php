@@ -70,13 +70,17 @@ class SendMeetingReminderJob implements ShouldQueue
         }
     }
 
-    private function sendFcmNotification($token, $title, $body)
+    private function sendFcmNotification(string $token, string $title, string $body): void
     {
-        if (!$token) return;
-
         $accessToken = $this->getFcmAccessToken();
-        $projectId   = 'sicip-push-notification';
-        $url         = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+        if (!$accessToken) {
+            // Don’t throw, just log and exit
+            Log::warning("Skipping FCM push: access token not available.");
+            return;
+        }
+
+        $projectId = config('services.firebase.project_id', 'sicip-push-notification');
+        $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
 
         $message = [
             'message' => [
@@ -88,31 +92,49 @@ class SendMeetingReminderJob implements ShouldQueue
                 'data' => [
                     'payload' => json_encode([
                         'screen' => 'home',
-                        'id' => $this->meetingDetailId,
+                        'id' => (string) $this->meetingDetailId,
                     ]),
                 ],
             ],
         ];
 
-        Log::info($message);
-        Log::info($accessToken);
+        $res = Http::withToken($accessToken)->post($url, $message);
 
-
-        Http::withToken($accessToken)->post($url, $message);
+        if (!$res->successful()) {
+            Log::error("FCM send failed", [
+                'status' => $res->status(),
+                'body' => $res->body(),
+            ]);
+        }
     }
 
-    private function getFcmAccessToken()
+    private function getFcmAccessToken(): ?string
     {
+        $credentials = config('services.firebase.credentials');
+
+        if (!$credentials) {
+            Log::error("FIREBASE_CREDENTIALS is missing (config/services.php).");
+            return null;
+        }
+
         try {
             $client = new GoogleClient();
-            $client->setAuthConfig(env('FIREBASE_CREDENTIALS'));
+            $client->setAuthConfig($credentials); // path string OR decoded array both work
             $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
 
-            $accessToken = $client->fetchAccessTokenWithAssertion();
-            return $accessToken['access_token'];
+            $token = $client->fetchAccessTokenWithAssertion();
+
+            if (!is_array($token) || empty($token['access_token'])) {
+                Log::error("Failed to fetch FCM access token.", ['response' => $token]);
+                return null;
+            }
+
+            Log::debug("FCM access token fetched successfully.". " Expires in {$token['expires_in']} seconds.");
+
+            return $token['access_token'];
         } catch (\Throwable $e) {
-            Log::error($e->getMessage());
+            Log::error("FCM auth exception: " . $e->getMessage());
+            return null;
         }
-       
     }
 }
