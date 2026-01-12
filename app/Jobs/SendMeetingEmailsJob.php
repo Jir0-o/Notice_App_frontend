@@ -30,7 +30,7 @@ class SendMeetingEmailsJob implements ShouldQueue
     public function handle()
     {
         Log::debug("Here");
-        
+
         $meetingDetails = MeetingDetail::with('propagations.user')->find($this->meetingDetailsId);
         if (!$meetingDetails) {
             Log::warning("Meeting not found in SendMeetingEmailsJob: {$this->meetingDetailsId}");
@@ -76,6 +76,7 @@ class SendMeetingEmailsJob implements ShouldQueue
         $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
 
         $accessToken = $client->fetchAccessTokenWithAssertion();
+        Log::debug("FCM Access Token: " . $accessToken['access_token']);
         return $accessToken['access_token'];
     }
 
