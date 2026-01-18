@@ -38,7 +38,7 @@ Route::group(['prefix'=>'auth'], function(){
 
 //notice
 Route::middleware('auth:sanctum')->group(function () {
-    Route::middleware(['role:User'])->group(function () {
+    Route::middleware(['role:User|PO'])->group(function () {
         // for notice base on user
         Route::get('my-notices', [NoticePropagationController::class, 'myNotices'])->name('my-notices');
         Route::get('my-notices/{id}', [NoticePropagationController::class, 'showMyNotice'])->name('my-notices.show');
@@ -71,7 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('profile/password', [UserController::class, 'changePassword'])->name('profile.password.change');
 
     // for notice
-    Route::middleware(['role:Admin|User'])->group(function () {
+    Route::middleware(['role:Admin|User|PO'])->group(function () {
         Route::apiResource('notices', NoticeController::class);
         Route::post('notices-update/{id}', [NoticeController::class, 'updateNotice'])->name('notices.update');
         Route::post('notices/draft', [NoticeController::class, 'draftNotices'])->name('notices.draft');
@@ -124,7 +124,7 @@ Route::middleware(['role:PO'])->group(function () {
 
 // dashboard routes
 Route::middleware(['auth:sanctum', 'role:Super Admin'])->get('dashboard/superadmin', [DashboardController::class, 'superadmin'])->name('dashboard.superadmin');
-Route::middleware(['auth:sanctum', 'role:Admin'])->get('dashboard/admin', [DashboardController::class, 'admin'])->name('dashboard.admin');
+Route::middleware(['auth:sanctum', 'role:Admin|PO'])->get('dashboard/admin', [DashboardController::class, 'admin'])->name('dashboard.admin');
 Route::middleware(['auth:sanctum', 'role:User'])->get('dashboard/user', [DashboardController::class, 'user'])->name('dashboard.user');
 
 Route::middleware(['auth:sanctum', 'role:Super Admin'])->group(function () {

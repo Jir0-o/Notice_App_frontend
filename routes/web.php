@@ -14,6 +14,7 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/login', fn () => redirect()->route('ext.login'))->name('login.form');
 // External Views
 Route::view('/ext/login', 'frontend.ext.login')->name('ext.login');
 
@@ -44,7 +45,7 @@ Route::view('/archive/designations', 'frontend.archive.designations')->name('arc
 Route::view('/archive/users', 'frontend.archive.users')->name('archive.users');
 
 // Settings Route
-Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+// Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
 
 // User Routes
 Route::view('/user/meetings', 'frontend.meetings.user_meetings')->name('user.meetings.index');

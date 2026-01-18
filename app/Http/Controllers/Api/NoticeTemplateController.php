@@ -25,17 +25,16 @@ class NoticeTemplateController extends Controller
 
         $query = NoticeTemplate::with(['distributions', 'regards', 'user.designation', 'approver']);
 
-        // Apply role-based filters
+        //  UPDATED role filters
         if ($user->hasRole('PO')) {
-            // PO: Only see their own notices
-            $query->where('user_id', $user->id);
+            // PO: see ONLY published notices (no drafts/pending)
+            $query->where('status', 'published')
+                ->where('approval_status', 'approved');
         } elseif ($user->hasRole('AEPD')) {
-
-            $query->where('approval_status', 'pending');
-            
-            // If you want AEPD to see all notices, remove the where clause above
+            // AEPD: see all (since approval flow is disabled for now)
+            // (no filter)
         } elseif ($user->hasRole('Admin') || $user->hasRole('Super Admin')) {
-            // Admin/Super Admin: See only approved/published notices
+            // Admin/Super Admin: only approved & published
             $query->where('approval_status', 'approved')
                 ->where('status', 'published');
         }
@@ -49,15 +48,17 @@ class NoticeTemplateController extends Controller
     {
         $perPage = (int) $request->get('per_page', 10);
         $user = $request->user();
-        
-        // Optional: Check if user is PO (add middleware in routes instead)
+
         if (!$user->hasRole('PO')) {
             return response()->json(['error' => 'Unauthorized. This route is for PO users only.'], 403);
         }
-        
+
+        // PO only sees published/approved (same rule)
         $data = NoticeTemplate::with(['distributions', 'regards', 'approver'])
             ->where('user_id', $user->id)
-            ->latest()
+            ->where('status', 'published')
+            ->where('approval_status', 'approved')
+            ->latest('id')
             ->paginate($perPage);
 
         return response()->json($data);
@@ -105,14 +106,12 @@ class NoticeTemplateController extends Controller
             'status'         => ['nullable','in:draft,pending,published,archived'],
             'is_active'      => ['nullable','boolean'],
 
-            // Distributions payload
             'distributions.internal_user_ids'      => ['nullable','array'],
             'distributions.internal_user_ids.*'    => ['nullable','integer','exists:users,id'],
             'distributions.external_users'         => ['nullable','array'],
             'distributions.external_users.*.name'  => ['required_with:distributions.external_users','string','max:150'],
             'distributions.external_users.*.designation' => ['nullable','string','max:150'],
 
-            // Regards payload
             'regards.internal_user_ids'            => ['nullable','array'],
             'regards.internal_user_ids.*'          => ['nullable','integer','exists:users,id'],
             'regards.external_users'               => ['nullable','array'],
@@ -123,46 +122,38 @@ class NoticeTemplateController extends Controller
 
         return DB::transaction(function () use ($validated, $request) {
             $user = $request->user();
+
+            //  UPDATED: no approval flow for PO now
             $status = $validated['status'] ?? 'draft';
-            
-            // Set approval status based on user role
+
+            // backward-compat: if old UI sends "pending", treat as publish now
+            if ($status === 'pending') {
+                $status = 'published';
+            }
+
             $approvalStatus = 'draft';
             $approvedBy = null;
             $approvedAt = null;
-            
-            if ($user->hasRole('PO')) {
-                // PO: draft = draft, published = pending for approval
-                if ($status === 'published' || $status === 'pending') {
-                    $approvalStatus = 'pending'; // Needs AEPD approval
-                    $status = 'pending'; // Set status to pending
-                } else {
-                    $approvalStatus = 'draft'; // Just a draft, not submitted yet
-                }
-            } elseif ($user->hasRole('AEPD') || $user->hasRole('Admin')) {
-                // AEPD and Admin can publish directly - no approval needed
-                if ($status === 'published') {
-                    $approvalStatus = 'approved';
-                    $approvedBy = $user->id; // They self-approve
-                    $approvedAt = now();
-                } else {
-                    $approvalStatus = 'draft'; // Draft status
-                }
+
+            if ($status === 'published') {
+                $approvalStatus = 'approved';
+                $approvedBy = $user->id; // self-approve
+                $approvedAt = now();
             }
 
             $tpl = NoticeTemplate::create([
-                'user_id'        => $user->id,
-                'memorial_no'    => $validated['memorial_no'],
-                'date'           => $validated['date'],
-                'subject'        => $validated['subject'],
-                'body'           => $validated['body'],
-                'signature_body' => $validated['signature_body'] ?? null,
-                'status'         => $status,
-                'approval_status'=> $approvalStatus,
-                'approved_by'    => $approvedBy,
-                'approved_at'    => $approvedAt,
+                'user_id'         => $user->id,
+                'memorial_no'     => $validated['memorial_no'],
+                'date'            => $validated['date'],
+                'subject'         => $validated['subject'],
+                'body'            => $validated['body'],
+                'signature_body'  => $validated['signature_body'] ?? null,
+                'status'          => $status,
+                'approval_status' => $approvalStatus,
+                'approved_by'     => $approvedBy,
+                'approved_at'     => $approvedAt,
             ]);
 
-            // build children
             $this->syncDistributions($tpl, $validated['distributions'] ?? []);
             $this->syncRegards($tpl, $validated['regards'] ?? []);
 
@@ -188,7 +179,6 @@ class NoticeTemplateController extends Controller
             'status'         => ['sometimes','in:draft,pending,published,archived'],
             'is_active'      => ['sometimes','boolean'],
 
-            // keep parent keys so they remain in $validated
             'distributions' => ['sometimes','array'],
             'distributions.internal_user_ids'      => ['sometimes','array'],
             'distributions.internal_user_ids.*'    => ['integer','exists:users,id'],
@@ -206,57 +196,43 @@ class NoticeTemplateController extends Controller
         ]);
 
         return DB::transaction(function () use ($validated, $tpl, $request, $user) {
-            // Handle approval logic
             $parentUpdates = [];
-            
-            if (isset($validated['status'])) {
-                $requested = $validated['status'];
 
-                if ($user->hasRole('PO')) {
-                    // PO: only draft OR submit-for-approval (pending)
-                    if (in_array($requested, ['pending', 'published'], true)) {
-                        $parentUpdates['status'] = 'pending';
-                        $parentUpdates['approval_status'] = 'pending';
-                        $parentUpdates['approved_by'] = null;
-                        $parentUpdates['approved_at'] = null;
-                    } else {
-                        // draft (or anything else -> draft)
-                        $parentUpdates['status'] = 'draft';
-                        $parentUpdates['approval_status'] = 'draft';
-                        $parentUpdates['approved_by'] = null;
-                        $parentUpdates['approved_at'] = null;
-                    }
-                }elseif ($user->hasRole('AEPD')) {
-                    // AEPD can approve PO's notices OR publish their own
-                    if ($tpl->approval_status === 'pending') {
-                        // Approving a PO's notice
-                        if ($validated['status'] === 'published') {
-                            $parentUpdates['approval_status'] = 'approved';
-                            $parentUpdates['approved_by'] = $user->id; // AEPD approves
-                            $parentUpdates['approved_at'] = now();
-                            $parentUpdates['status'] = 'published';
-                        }
-                    } else {
-                        // AEPD editing their own or others' notices
-                        if ($validated['status'] === 'published') {
-                            $parentUpdates['approval_status'] = 'approved';
-                            $parentUpdates['approved_by'] = $user->id; // Self-approve
-                            $parentUpdates['approved_at'] = now();
-                        }
-                        $parentUpdates['status'] = $validated['status'];
-                    }
-                } elseif ($user->hasRole('Admin')) {
-                    // Admin can publish directly (self-approve)
-                    if ($validated['status'] === 'published') {
-                        $parentUpdates['approval_status'] = 'approved';
-                        $parentUpdates['approved_by'] = $user->id; // Self-approve
-                        $parentUpdates['approved_at'] = now();
-                    }
-                    $parentUpdates['status'] = $validated['status'];
+            // UPDATED: simplify approval logic
+            if (isset($validated['status'])) {
+                $status = $validated['status'];
+
+                if ($status === 'pending') {
+                    $status = 'published'; // backward-compat
+                }
+
+                if ($status === 'published') {
+                    $parentUpdates['status'] = 'published';
+                    $parentUpdates['approval_status'] = 'approved';
+                    $parentUpdates['approved_by'] = $user->id;
+                    $parentUpdates['approved_at'] = now();
+
+                    // clear rejection fields if you have them
+                    $parentUpdates['rejected_by'] = null;
+                    $parentUpdates['rejected_at'] = null;
+                    $parentUpdates['rejection_reason'] = null;
+
+                } elseif ($status === 'draft') {
+                    $parentUpdates['status'] = 'draft';
+                    $parentUpdates['approval_status'] = 'draft';
+                    $parentUpdates['approved_by'] = null;
+                    $parentUpdates['approved_at'] = null;
+
+                    $parentUpdates['rejected_by'] = null;
+                    $parentUpdates['rejected_at'] = null;
+                    $parentUpdates['rejection_reason'] = null;
+
+                } else {
+                    // archived etc
+                    $parentUpdates['status'] = $status;
                 }
             }
 
-            // Update other fields
             foreach (['memorial_no','date','subject','body','signature_body','is_active'] as $key) {
                 if (array_key_exists($key, $validated)) {
                     $parentUpdates[$key] = $validated[$key];

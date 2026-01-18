@@ -128,7 +128,7 @@
           // Decide where to push the user when logged in
           function goDashboardByRole(role){
             if(role === 'Super Admin') return '/dashboard';
-            if(role === 'Admin')       return '/meetings';
+            if(role === 'Admin|PO')       return '/meetings';
             return '/user/meetings';
           }
 
@@ -165,6 +165,78 @@
           })();
         })();
         </script>
+
+        <script>
+            const API_BASE = '{{ rtrim(config("app.url") ?: url("/"), "/") }}/api';
+
+            // show message after redirects (we use sessionStorage)
+            (function () {
+              const msg = sessionStorage.getItem('flash_error');
+              if (msg) {
+                sessionStorage.removeItem('flash_error');
+                if (window.toastr) toastr.warning(msg);
+                else alert(msg);
+              }
+            })();
+
+            // If any API call returns redirect_to, auto redirect
+            $(document).ajaxError(function (event, xhr) {
+              const j = xhr.responseJSON || {};
+              if ((xhr.status === 401 || xhr.status === 403) && j.redirect_to) {
+                sessionStorage.setItem('flash_error', j.message || 'Unauthorized');
+                window.location.href = j.redirect_to;
+              }
+            });
+          </script>
+
+          <script>
+              (function () {
+                // Pages can set window.requiredRoles = ['admin','po'] etc.
+                const required = window.requiredRoles || [];
+                if (!required.length) return; // no guard needed on this page
+
+                const token = localStorage.getItem('api_token');
+                if (!token) {
+                  sessionStorage.setItem('flash_error', 'Please login first.');
+                  window.location.href = '{{ route("ext.login") }}';
+                  return;
+                }
+
+                $.ajax({
+                  url: API_BASE + '/profile',
+                  method: 'GET',
+                  headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token }
+                })
+                .done(function (resp) {
+                  const u = resp?.data || resp || {};
+                  const roles = [];
+
+                  if (u.role) roles.push(u.role);
+                  if (Array.isArray(u.role_names)) roles.push(...u.role_names);
+                  if (Array.isArray(u.roles)) roles.push(...u.roles.map(r => (typeof r === 'string' ? r : (r.name || ''))));
+
+                  const rolesLc = roles.map(r => String(r).toLowerCase()).filter(Boolean);
+                  const requiredLc = required.map(r => String(r).toLowerCase());
+
+                  const ok = rolesLc.some(r => requiredLc.includes(r));
+                  if (ok) return;
+
+                  // pick dashboard based on actual role
+                  let target = '{{ route("dashboard.user") }}';
+                  if (rolesLc.includes('super admin')) target = '{{ route("dashboard.superadmin") }}';
+                  else if (rolesLc.includes('admin') || rolesLc.includes('po')) target = '{{ route("dashboard.admin") }}';
+
+                  sessionStorage.setItem('flash_error', 'You are not allowed to access that page. Redirected to your dashboard.');
+                  window.location.href = target;
+                })
+                .fail(function () {
+                  sessionStorage.setItem('flash_error', 'Session expired. Please login again.');
+                  window.location.href = '{{ route("ext.login") }}';
+                });
+
+              })();
+              </script>
+
 
   <script>
   (function () {

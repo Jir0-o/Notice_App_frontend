@@ -85,6 +85,7 @@
         const r = String(role).toLowerCase();
         if (r.includes('super')) return '/dashboard';
         if (r === 'admin')       return '/meetings';
+        if (r === 'po')          return '/meetings';
         return '/user/meetings';
       }
 

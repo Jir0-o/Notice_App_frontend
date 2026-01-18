@@ -84,6 +84,7 @@
     </div>
   </div>
 </div>
+<script>window.requiredRoles = ['super admin'];</script>
 <script>
 $(function(){
   const API_BASE = '{{ url('/') }}/api';

@@ -167,6 +167,7 @@
 
         if (role.includes('super')) redirectUrl = '{{ route('dashboard') }}';
         else if (role === 'admin') redirectUrl = '{{ route('meetings.index') }}';
+        else if (role === 'po') redirectUrl = '{{ route('meetings.index') }}';
         else redirectUrl = '{{ route('user.meetings.index') }}';
 
         showAlert('success', 'Welcome ' + role.toUpperCase() + '! Redirecting...');

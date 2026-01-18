@@ -63,8 +63,7 @@
       </ul>
     </li>
 
-    <!-- Admin links -->
-    <li class="menu-item menu-by-role" data-role="Admin" id="menu-meetings-admin" style="display:none;">
+    <li class="menu-item menu-by-role" data-role="Admin, PO" id="menu-meetings-admin" style="display:none;">
       <a href="{{ route('meetings.index') }}" class="menu-link">
         <i class="menu-icon tf-icons bx bx-calendar"></i>
         <div data-i18n="Meetings">Meetings</div>

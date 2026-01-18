@@ -5,7 +5,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet">
- 
+
 <style>
   .side-box { max-height: 28vh; overflow:auto; padding:.5rem; border:1px solid #e3e3e3; border-radius:6px; }
   .modal-panel { max-width: 1000px; width: 95%; max-height: 90vh; overflow:auto; }
@@ -20,8 +20,6 @@
   .recipient-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #eee; align-items:center;}
   .recipient-meta { color:#6b7280; font-size:.85rem; margin-left:8px; }
   .badge-role { font-size:11px; padding:3px 6px; border-radius:6px; background:#eef2ff; color:#3730a3; margin-left:8px; }
-  .btn-po { background-color: #ffc107; border-color: #ffc107; }
-  .btn-po:hover { background-color: #e0a800; border-color: #d39e00; }
 </style>
 
 <div class="card mb-4">
@@ -38,13 +36,12 @@
       <table class="table table-striped" id="noticesTable">
         <thead>
           <tr>
-            <th>#</th>
-            <th>Memo No</th>
-            <th>Date</th>
+            <th style="width:60px">#</th>
+            <th style="width:140px">Memo No</th>
+            <th style="width:120px">Date</th>
             <th>Subject</th>
-            <th>Status</th>
-            <th>Approval</th>
-            <th>Actions</th>
+            <th style="width:120px">Status</th>
+            <th style="width:220px">Actions</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -72,6 +69,7 @@
           <div id="updateNoticeWarning" class="text-center mb-3" style="display:none; font-weight:600; color:#b02a37;">
             একই তারিখ ও স্মারকে স্থলাভিষিক্ত হবে।
           </div>
+
           <div class="row g-2 mb-3">
             <div class="col-md-4">
               <label class="form-label">Memo No</label>
@@ -101,31 +99,38 @@
 
           <div class="row gy-3">
             <div class="col-md-4">
-            <label class="form-label d-flex justify-content-between align-items-center">
-              <span>Departments</span>
-              <span class="form-check m-0">
-                <input class="form-check-input" type="checkbox" id="selectAllDepartments">
-                <label class="form-check-label small" for="selectAllDepartments">All</label>
-              </span>
-            </label>
-            <div id="departmentsBox" class="side-box small-muted">Loading...</div>
+              <label class="form-label d-flex justify-content-between align-items-center">
+                <span>Departments</span>
+                <span class="form-check m-0">
+                  <input class="form-check-input" type="checkbox" id="selectAllDepartments">
+                  <label class="form-check-label small" for="selectAllDepartments">All</label>
+                </span>
+              </label>
+              <div id="departmentsBox" class="side-box small-muted">Loading...</div>
             </div>
 
             <div class="col-md-4">
               <label class="form-label">Internal users (select -> click target below)</label>
+
               <div class="d-flex justify-content-between align-items-center mb-2">
-              <div>
-                <input type="checkbox" id="selectAllUsers" />
-                <label for="selectAllUsers" class="ms-1 small-muted">Select all users</label>
+                <div>
+                  <input type="checkbox" id="selectAllUsers" />
+                  <label for="selectAllUsers" class="ms-1 small-muted">Select all users</label>
+                </div>
+                <div>
+                  <button type="button" id="clearUserSelection" class="btn btn-sm btn-link small-muted">Clear</button>
+                </div>
               </div>
-              <div>
-                <button type="button" id="clearUserSelection" class="btn btn-sm btn-link small-muted">Clear</button>
-              </div>
-            </div>
+
               <div id="usersBox" class="side-box small-muted">Select departments to load users</div>
+
               <div class="mt-2">
-                <button type="button" id="btn-add-to-distributions" class="btn btn-sm btn-outline-primary me-2">Add selected → Distributions</button>
-                <button type="button" id="btn-add-to-regards" class="btn btn-sm btn-outline-secondary">Add selected → Regards</button>
+                <button type="button" id="btn-add-to-distributions" class="btn btn-sm btn-outline-primary me-2">
+                  Add selected → Distributions
+                </button>
+                <button type="button" id="btn-add-to-regards" class="btn btn-sm btn-outline-secondary">
+                  Add selected → Regards
+                </button>
               </div>
             </div>
 
@@ -178,10 +183,13 @@
         </div>
 
         <div class="modal-footer">
-            <button type="button" id="btn-delete-notice" class="btn btn-danger me-auto" style="display:none;">Delete</button>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" id="btn-save-draft" class="btn btn-outline-secondary">Save Draft</button>
-            <button id="btn-publish" type="submit" class="btn btn-primary">Publish</button>
+          <button type="button" id="btn-delete-notice" class="btn btn-danger me-auto" style="display:none;">Delete</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+
+          {{-- Draft button stays for Admin/AEPD etc. For PO we will hide via JS. --}}
+          <button type="button" id="btn-save-draft" class="btn btn-outline-secondary">Save Draft</button>
+
+          <button id="btn-publish" type="submit" class="btn btn-primary">Publish</button>
         </div>
       </form>
     </div>
@@ -190,6 +198,7 @@
 
 {{-- libs --}}
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -198,10 +207,10 @@
 (function($){
   const API_BASE = "{{ rtrim(config('app.url') ?: request()->getSchemeAndHttpHost(), '/') }}/api";
   const token = localStorage.getItem('api_token') || null;
-  
-  // Get user role from sidebar script
+
+  // role + current user id (for PO ownership actions)
   const userRole = window.currentUserRole || localStorage.getItem('user_role') || 'User';
-  console.log('Current user role:', userRole);
+  const currentUserId = {{ (int)(auth()->id() ?? 0) }};
 
   $.ajaxSetup({
     headers: {
@@ -211,7 +220,6 @@
     }
   });
 
-  // DOM shortcuts
   const $noticesTbody = $('#noticesTable tbody');
   const $pagination = $('#pagination');
 
@@ -219,130 +227,96 @@
   let departments = [];
   let departmentUsers = {};
   let allUsersCache = null;
+
   let distributionsInternalIds = [];
   let regardsInternalIds = [];
   let distributionsExternal = [];
   let regardsExternal = [];
+
   let finalSelectedUsers = [];
   let externalUsers = [];
   let selectedUserIds = [];
   let tempSelectedIds = [];
+
   let quill = null;
   let quillSignature = null;
-  let isBulkSelecting = false;
 
   // init editors
-  try { 
-    if (document.querySelector('#quillEditor')) quill = new Quill('#quillEditor', { theme: 'snow' }); 
-  } catch(e){ console.warn('quill body init failed', e); quill = null; }
-  
-  try { 
-    if (document.querySelector('#signatureEditor')) quillSignature = new Quill('#signatureEditor', { 
-      theme: 'snow', 
-      modules: { toolbar: [['bold','italic'], [{ 'header': [1,2,false] }]] }
-    }); 
-  } catch(e){ console.warn('signature quill init failed', e); quillSignature = null; }
+  try { if (document.querySelector('#quillEditor')) quill = new Quill('#quillEditor', { theme: 'snow' }); } catch(e){ quill = null; }
+  try {
+    if (document.querySelector('#signatureEditor')) {
+      quillSignature = new Quill('#signatureEditor', {
+        theme: 'snow',
+        modules: { toolbar: [['bold','italic'], [{ 'header': [1,2,false] }]] }
+      });
+    }
+  } catch(e){ quillSignature = null; }
 
-  function t(msg, type='success'){ toastr[type](msg); }
+  function t(msg, type='success'){ if (toastr[type]) toastr[type](msg); else toastr.success(msg); }
   function escapeHtml(s){ return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-  
+
+  // safer extractor for mixed API shapes
   function safeData(res) {
     if (!res) return null;
-    if (res.data !== undefined && res.data !== null && typeof res.data !== 'object') return res.data;
-    if (res.data && res.data.data !== undefined) return res.data.data;
-    if (res.data) return res.data;
-    return res;
+
+    // wrapper: {success:true, data: ...}
+    if (typeof res === 'object' && res.success === true && res.data !== undefined) return res.data;
+
+    // paginator: {data: [...]}
+    if (typeof res === 'object' && Array.isArray(res.data)) return res.data;
+
+    // nested: {data:{data:[...]}}
+    if (res.data && res.data.data && Array.isArray(res.data.data)) return res.data.data;
+
+    // direct array
+    if (Array.isArray(res)) return res;
+
+    return res.data ?? res;
   }
 
-  // Get status badge HTML
-  function getStatusBadge(status, approvalStatus) {
-      if (approvalStatus === 'pending') {
-          return '<span class="badge bg-warning">Pending Approval</span>';
-      } else if (approvalStatus === 'approved') {
-          return '<span class="badge bg-success">Approved</span>';
-      } else if (approvalStatus === 'rejected') {
-          return '<span class="badge bg-danger">Rejected</span>';
-      } else if (approvalStatus === 'draft') {
-          return '<span class="badge bg-secondary">Draft</span>';
-      } else if (status === 'published') {
-          return '<span class="badge bg-primary">Published</span>';
-      }
-      return '<span class="badge bg-light text-dark">' + (status || 'Unknown') + '</span>';
+  // STATUS badge (no approval workflow now)
+  function getStatusBadge(status) {
+    status = String(status || '').toLowerCase();
+    if (status === 'published') return '<span class="badge bg-success">Published</span>';
+    if (status === 'draft') return '<span class="badge bg-secondary">Draft</span>';
+    if (status === 'archived') return '<span class="badge bg-dark">Archived</span>';
+    return '<span class="badge bg-light text-dark">' + escapeHtml(status || 'Unknown') + '</span>';
   }
- 
-  // Get action buttons based on user role and notice status
+
+  // Actions: PO can edit/delete ONLY their own notices (we allow editing published too now)
   function getActionButtons(notice) {
-      let buttons = '';
-      const viewUrl = "{{ url('/generate/view/notice') }}/" + encodeURIComponent(notice.id);
-      
-      // View button for everyone
-      buttons += '<a class="btn btn-sm btn-outline-secondary btn-view me-1" href="' + viewUrl + '" target="_blank">View</a>';
-      
-      if (userRole === 'PO') {
-          // PO can edit their own draft notices
-          if (notice.approval_status === 'draft') {
-              buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
-              buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
-          }
-          // PO can edit and resubmit rejected notices
-          else if (notice.approval_status === 'rejected') {
-              buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit & Resubmit</button>';
-          }
-          // PO can view but not edit pending or approved notices
-      } 
-      else if (userRole === 'AEPD') {
-          // AEPD can edit any notice
-          buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
-          
-          // AEPD can approve/reject pending notices (only if created by PO)
-          if (notice.approval_status === 'pending' && notice.user && notice.user.role === 'PO') {
-              buttons += '<button type="button" class="btn btn-sm btn-outline-success btn-approve me-1" data-id="' + notice.id + '">Approve</button>';
-              buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-reject" data-id="' + notice.id + '">Reject</button>';
-          } else {
-              buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
-          }
-      } 
-      else if (userRole === 'Admin' || userRole === 'Super Admin') {
-          // Admin can edit and delete any notice
-          buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
-          buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
+    let buttons = '';
+    const viewUrl = "{{ url('/generate/view/notice') }}/" + encodeURIComponent(notice.id);
+
+    buttons += '<a class="btn btn-sm btn-outline-secondary btn-view me-1" href="' + viewUrl + '" target="_blank">View</a>';
+
+    const isOwner = String(notice.user_id || '') === String(currentUserId || '');
+
+    if (userRole === 'PO') {
+      if (isOwner) {
+        buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
+        buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
       }
-      
-      return buttons;
+    } else if (userRole === 'AEPD' || userRole === 'Admin' || userRole === 'Super Admin') {
+      buttons += '<button type="button" class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="' + notice.id + '">Edit</button>';
+      buttons += '<button type="button" class="btn btn-sm btn-outline-danger btn-delete" data-id="' + notice.id + '">Delete</button>';
+    }
+
+    return buttons;
   }
 
-  // Adjust modal buttons based on user role
   function adjustModalButtons(notice) {
-      const isEditMode = notice && notice.id;
-      
-      if (userRole === 'PO') {
-          if (isEditMode) {
-              if (notice.approval_status === 'pending') {
-                  $('#btn-publish').text('Update & Resubmit').removeClass('btn-primary').addClass('btn-warning');
-                  $('#btn-save-draft').hide(); // Can't save draft when pending
-              } else if (notice.approval_status === 'rejected') {
-                  $('#btn-publish').text('Resubmit for Approval').removeClass('btn-primary').addClass('btn-warning');
-                  $('#btn-save-draft').show();
-              } else if (notice.approval_status === 'draft') {
-                  $('#btn-publish').text('Submit for Approval').removeClass('btn-primary').addClass('btn-warning');
-                  $('#btn-save-draft').show();
-              } else if (notice.approval_status === 'approved') {
-                  $('#btn-publish').hide(); // Can't edit approved notices
-                  $('#btn-save-draft').hide();
-              }
-          } else {
-              $('#btn-publish').text('Submit for Approval').removeClass('btn-primary').addClass('btn-warning');
-              $('#btn-save-draft').show();
-          }
-      } else {
-          if (isEditMode && notice.approval_status === 'approved') {
-              $('#btn-publish').text('Update Published').addClass('btn-primary').removeClass('btn-warning');
-              $('#btn-save-draft').hide();
-          } else {
-              $('#btn-publish').text('Publish').addClass('btn-primary').removeClass('btn-warning');
-              $('#btn-save-draft').show();
-          }
-      }
+    const isEditMode = notice && notice.id;
+
+    $('#btn-publish').show().removeClass('btn-warning btn-po').addClass('btn-primary');
+    $('#btn-publish').text(isEditMode ? 'Update' : 'Publish');
+
+    // PO: hide draft button (since PO list shows only published per your rule)
+    if (userRole === 'PO') {
+      $('#btn-save-draft').hide();
+    } else {
+      $('#btn-save-draft').show();
+    }
   }
 
   // ---------- Departments ----------
@@ -408,17 +382,22 @@
       })
       .catch(function(err){
         console.warn('Primary dept-users failed, falling back to /users', err);
+
+        // fallback to /users (might return wrapper paginate)
         return $.get(API_BASE + '/users')
           .then(function(r){
-            const all = safeData(r) || [];
-            const arr = Array.isArray(all) ? all : [];
-            const filtered = arr.filter(function(u){
+            const payload = (r && r.data) ? r.data : r;
+            const paginator = payload && payload.data ? payload : (payload?.data ? payload : null);
+
+            const rows = (r && r.success === true && r.data && Array.isArray(r.data.data))
+              ? r.data.data
+              : (paginator && Array.isArray(paginator.data) ? paginator.data : []);
+
+            const filtered = rows.filter(function(u){
               return (u.department_id && String(u.department_id) === String(depId))
-                || (u.department && String(u.department.id || u.department.department_id || '') === String(depId))
-                || (u.departments && Array.isArray(u.departments) && u.departments.some(function(d){ 
-                  return String(d.id || d.department_id || '') === String(depId); 
-                }));
+                || (u.department && String(u.department.id || '') === String(depId));
             });
+
             departmentUsers[depId] = filtered;
             return filtered;
           })
@@ -433,8 +412,12 @@
     if (allUsersCache) return $.Deferred().resolve(allUsersCache).promise();
     return $.get(API_BASE + '/users')
       .then(function(res){
-        const arr = safeData(res) || [];
-        allUsersCache = Array.isArray(arr) ? arr : [];
+        // handle wrapper paginate
+        const rows = (res && res.success === true && res.data && Array.isArray(res.data.data))
+          ? res.data.data
+          : (res && res.data && Array.isArray(res.data.data) ? res.data.data : (Array.isArray(res) ? res : []));
+
+        allUsersCache = rows;
         return allUsersCache;
       })
       .fail(function(err){
@@ -457,7 +440,7 @@
       </div>`);
     });
   }
-  
+
   function renderRegExternalList(){
     const $l = $('#regExternalList').empty();
     if (!regardsExternal.length) return $l.html('<small class="text-muted">No external regards</small>');
@@ -560,7 +543,7 @@
     if (!dateString) return '';
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('en-GB'); // DD/MM/YYYY format
+      return date.toLocaleDateString('en-GB'); // DD/MM/YYYY
     } catch(e) {
       return dateString;
     }
@@ -568,53 +551,43 @@
 
   // ---------- CRUD list / table ----------
   function loadNotices(page=1, per_page=10){
-      $noticesTbody.html('<tr><td colspan="7">Loading...</td></tr>');
-      const userRole = window.currentUserRole || localStorage.getItem('user_role') || 'User';
-      
-      // Use different endpoints based on role
-      let url = '';
-      
-      if (userRole === 'AEPD') {
-          // AEPD sees pending approval notices
-          url = API_BASE + '/notice-templates/pending-approval?page=' + page + '&per_page=' + per_page;
-      } else {
-          // PO and Admin see filtered notices via the main endpoint
-          url = API_BASE + '/notice-templates?page=' + page + '&per_page=' + per_page;
-      }
-      
-      $.get(url)
-          .done(function(res){
-              const payload = (res && res.data) ? res.data : res;
-              const data = safeData(res) || payload.data || payload;
-              const items = Array.isArray(data) ? data : [];
-              renderNotices(items);
-              renderPagination(res || {});
-          })
-          .fail(function(err){
-              console.error('loadNotices', err);
-              $noticesTbody.html('<tr><td colspan="7" class="text-danger">Failed to load</td></tr>');
-          });
+    $noticesTbody.html('<tr><td colspan="6">Loading...</td></tr>');
+
+    const url = API_BASE + '/notice-templates?page=' + page + '&per_page=' + per_page;
+
+    $.get(url)
+      .done(function(res){
+        // paginator expected: {data:[...], current_page, last_page, from...}
+        const items = (res && Array.isArray(res.data)) ? res.data : [];
+        renderNotices(items, res);
+        renderPagination(res || {});
+      })
+      .fail(function(err){
+        console.error('loadNotices', err);
+        $noticesTbody.html('<tr><td colspan="6" class="text-danger">Failed to load</td></tr>');
+      });
   }
-  
-  function renderNotices(items){
+
+  function renderNotices(items, pager){
     $noticesTbody.empty();
+
     if (!items.length){
-      $noticesTbody.html('<tr><td colspan="7"><small class="text-muted">No notices</small></td></tr>');
+      $noticesTbody.html('<tr><td colspan="6"><small class="text-muted">No notices</small></td></tr>');
       return;
     }
 
+    const startNo = (pager && pager.from) ? Number(pager.from) : 1;
+
     items.forEach(function(n, idx){
       const status = n.status || '—';
-      const approvalStatus = n.approval_status || '—';
-      
+
       const tr = $(
         '<tr>' +
-          '<td>' + (idx+1) + '</td>' +
+          '<td>' + (startNo + idx) + '</td>' +
           '<td>' + escapeHtml(n.memorial_no || '') + '</td>' +
           '<td>' + escapeHtml(formatDateDisplay(n.date || '')) + '</td>' +
           '<td>' + escapeHtml(n.subject || '') + '</td>' +
-          '<td>' + getStatusBadge(status, approvalStatus) + '</td>' +
-          '<td>' + escapeHtml(approvalStatus || '—') + '</td>' +
+          '<td>' + getStatusBadge(status) + '</td>' +
           '<td>' + getActionButtons(n) + '</td>' +
         '</tr>'
       );
@@ -633,23 +606,26 @@
       $p.append(li);
     }
   }
-  
-  $pagination.on('click', '.page-link', function(e){ 
-    e.preventDefault(); 
-    const page = $(this).data('page') || 1; 
-    loadNotices(page); 
+
+  $pagination.on('click', '.page-link', function(e){
+    e.preventDefault();
+    const page = $(this).data('page') || 1;
+    loadNotices(page);
   });
 
-  // ---------- modal helpers (create / edit) ----------
+  // ---------- modal helpers ----------
   function resetNoticeFormState(){
     try { $('#noticeForm')[0].reset(); } catch(e){}
+
     if (quill) quill.setContents([{ insert: '\n' }]);
     if (quillSignature) quillSignature.setContents([{ insert: '\n' }]);
+
     finalSelectedUsers = [];
     externalUsers = [];
     selectedUserIds = [];
     tempSelectedIds = [];
     departmentUsers = {};
+
     $('#notice_id').val('');
     $('#noticeModalTitle').text('Create Notice');
     $('#btn-delete-notice').hide();
@@ -658,29 +634,22 @@
     regardsInternalIds = [];
     distributionsExternal = [];
     regardsExternal = [];
+
     renderDistExternalList();
     renderRegExternalList();
     renderSelectedTargetPreview();
     renderUsersBox();
-    $('#btn-save-draft').show();
-    $('#btn-publish').show();
   }
 
   function fetchNoticeById(id){
-    return $.get(API_BASE + '/notice-templates/' + id + '?include=true')
-      .then(function(r){ return safeData(r) || r.data || r; })
-      .catch(function(err){
-        console.warn('Primary GET failed', err && err.status);
-        return $.get(API_BASE + '/notice-templates/' + id)
-          .then(function(r2){ return safeData(r2) || r2.data || r2; })
-          .fail(function(err2){ err2._primary = err; return $.Deferred().reject(err2).promise(); });
-      });
+    return $.get(API_BASE + '/notice-templates/' + id)
+      .then(function(r){ return r; });
   }
 
-  // map entry -> internal or external object
   function mapToInternalOrExternal(entry, allUsers){
     if (!entry) return { type: 'external', data: { name: '', designation:'', note: '' } };
     if (entry.user_id) return { type: 'internal', id: Number(entry.user_id), data: null };
+
     let mapped = null;
     if (entry.email && Array.isArray(allUsers) && allUsers.length) {
       mapped = allUsers.find(u => u.email && entry.email && u.email.toLowerCase() === String(entry.email).toLowerCase());
@@ -690,54 +659,43 @@
       mapped = allUsers.find(u => u.name && String(u.name).trim().toLowerCase() === nameNorm);
     }
     if (mapped) return { type: 'internal', id: Number(mapped.id), data: null };
+
     return { type: 'external', data: { name: entry.name || '', designation: entry.designation || null, note: entry.note || null, email: entry.email || '' } };
   }
 
-  // open modal (populate)
   function openNoticeModal(notice){
     resetNoticeFormState();
-    const n = (notice && notice.data) ? notice.data : notice || null;
 
-    if (n) {
-      $('#updateNoticeWarning').show();
-    } else {
-      $('#updateNoticeWarning').hide();
-    }
+    const n = notice || null;
 
-    // fill parent fields
+    if (n) $('#updateNoticeWarning').show();
+    else $('#updateNoticeWarning').hide();
+
     if (n) {
       $('#notice_id').val(n.id || '');
       $('#memorial_no').val(n.memorial_no || '');
       $('#notice_date').val(formatIsoToYMD(n.date || ''));
       $('#subject').val(n.subject || '');
+
       const bodyHtml = n.body || '';
       if (quill && quill.root) quill.root.innerHTML = bodyHtml; else $('#bodyInput').val(bodyHtml);
+
       const signatureHtml = n.signature_body || '';
       if (quillSignature && quillSignature.root) quillSignature.root.innerHTML = signatureHtml; else $('#signatureInput').val(signatureHtml);
 
       $('#noticeModalTitle').text('Update Notice');
       $('#btn-delete-notice').show();
-      
-      // Adjust buttons based on user role and notice status
-      adjustModalButtons(n);
     } else {
-      $('#notice_id').val('');
-      $('#memorial_no').val('');
-      $('#notice_date').val('');
-      $('#subject').val('');
-      if (quill && quill.root) quill.root.innerHTML = '';
-      if (quillSignature && quillSignature.root) quillSignature.root.innerHTML = '';
       $('#noticeModalTitle').text('Create Notice');
       $('#btn-delete-notice').hide();
-      
-      // Adjust buttons for new notice
-      adjustModalButtons(null);
     }
 
-    // ensure departments loaded and users cache ready
+    // button logic (PO: publish/update only)
+    adjustModalButtons(n);
+
     loadDepartments();
+
     fetchAllUsers().then(function(allUsers){
-      // reset internal/external arrays
       distributionsInternalIds = [];
       regardsInternalIds = [];
       distributionsExternal = [];
@@ -747,14 +705,13 @@
       selectedUserIds = [];
       tempSelectedIds = [];
 
-      // populate from payloads if editing
       if (Array.isArray(n?.distributions)) {
         n.distributions.forEach(function(rec){
           const mapped = mapToInternalOrExternal(rec, allUsers);
           if (mapped.type === 'internal') {
             if (!distributionsInternalIds.includes(mapped.id)) distributionsInternalIds.push(mapped.id);
             if (!finalSelectedUsers.some(u => String(u.id) === String(mapped.id))) {
-              const found = (Object.values(departmentUsers).flat().find(u => String(u.id) === String(mapped.id)) || allUsers.find(u => String(u.id) === String(mapped.id)));
+              const found = allUsers.find(u => String(u.id) === String(mapped.id));
               finalSelectedUsers.push({ id: mapped.id, name: found?.name || rec.name || '', email: found?.email || rec.email || '' });
               selectedUserIds.push(mapped.id);
             }
@@ -772,7 +729,7 @@
           if (mapped.type === 'internal') {
             if (!regardsInternalIds.includes(mapped.id)) regardsInternalIds.push(mapped.id);
             if (!finalSelectedUsers.some(u => String(u.id) === String(mapped.id))) {
-              const found = (Object.values(departmentUsers).flat().find(u => String(u.id) === String(mapped.id)) || allUsers.find(u => String(u.id) === String(mapped.id)));
+              const found = allUsers.find(u => String(u.id) === String(mapped.id));
               finalSelectedUsers.push({ id: mapped.id, name: found?.name || rec.name || '', email: found?.email || rec.email || '' });
               selectedUserIds.push(mapped.id);
             }
@@ -784,185 +741,37 @@
         });
       }
 
-      // render everything
       renderUsersBox();
       renderDistExternalList();
       renderRegExternalList();
       renderSelectedTargetPreview();
 
-      // show modal
-      const noticeModalEl = document.getElementById('noticeModal');
-      const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl, { backdrop: 'static' }) : null;
-      if (instance) instance.show(); else $('#noticeModal').show();
-
-    }).fail(function(){
-      // if all users fail, fallback to showing externals only
-      if (Array.isArray(n?.distributions)) {
-        n.distributions.forEach(r => { if (!r.user_id && r.name) distributionsExternal.push({ _uid: uid(), name: r.name, designation: r.designation || '' }); });
-      }
-      if (Array.isArray(n?.regards)) {
-        n.regards.forEach(r => { if (!r.user_id && r.name) regardsExternal.push({ _uid: uid(), name: r.name, designation: r.designation || '', note: r.note || '' }); });
-      }
-      renderUsersBox();
-      renderDistExternalList();
-      renderRegExternalList();
-      renderSelectedTargetPreview();
       const noticeModalEl = document.getElementById('noticeModal');
       const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl, { backdrop: 'static' }) : null;
       if (instance) instance.show(); else $('#noticeModal').show();
     });
   }
 
-  // ---------- event handlers ----------
-  // add external distribution
-  $('#btn-add-dist-ext').on('click', function(){
-    const name = ($('#dist_ext_name').val()||'').trim();
-    const designation = ($('#dist_ext_designation').val()||'').trim();
-    if (!name) { toastr.error('Name required'); return; }
-    const obj = { _uid: uid(), name, designation };
-    distributionsExternal.push(obj);
-    externalUsers.push({ _uid: obj._uid, name: obj.name, email: '' });
-    $('#dist_ext_name').val(''); $('#dist_ext_designation').val('');
-    renderDistExternalList(); renderSelectedTargetPreview();
-  });
-
-  // add external regard
-  $('#btn-add-reg-ext').on('click', function(){
-    const name = ($('#reg_ext_name').val()||'').trim();
-    const designation = ($('#reg_ext_designation').val()||'').trim();
-    const note = ($('#reg_ext_note').val()||'').trim();
-    if (!name) { toastr.error('Name required'); return; }
-    const obj = { _uid: uid(), name, designation, note };
-    regardsExternal.push(obj);
-    externalUsers.push({ _uid: obj._uid, name: obj.name, email: '' });
-    $('#reg_ext_name').val(''); $('#reg_ext_designation').val(''); $('#reg_ext_note').val('');
-    renderRegExternalList(); renderSelectedTargetPreview();
-  });
-
-  // remove ext items (lists)
-  $(document).on('click', '.btn-remove-dist-ext', function(){
-    const u = $(this).attr('data-uid');
-    distributionsExternal = distributionsExternal.filter(x => x._uid !== u);
-    externalUsers = externalUsers.filter(e => e._uid !== u);
-    renderDistExternalList();
-    renderSelectedTargetPreview();
-  });
-  
-  $(document).on('click', '.btn-remove-reg-ext', function(){
-    const u = $(this).attr('data-uid');
-    regardsExternal = regardsExternal.filter(x => x._uid !== u);
-    externalUsers = externalUsers.filter(e => e._uid !== u);
-    renderRegExternalList();
-    renderSelectedTargetPreview();
-  });
-
-  // remove from external preview
-  $(document).on('click', '.btn-remove-external', function(){
-    const u = $(this).attr('data-uid');
-    distributionsExternal = distributionsExternal.filter(x => x._uid !== u);
-    regardsExternal = regardsExternal.filter(x => x._uid !== u);
-    externalUsers = externalUsers.filter(e => e._uid !== u);
-    renderDistExternalList();
-    renderRegExternalList();
-    renderSelectedTargetPreview();
-  });
-
-  // add selected internal users to Distributions or Regards
-  $('#btn-add-to-distributions').on('click', function(){
-    if (!tempSelectedIds.length) { toastr.info('Select internal users first'); return; }
-    tempSelectedIds.forEach(function(idStr){
-      const uid = Number(idStr);
-      if (!uid) return;
-      if (!distributionsInternalIds.includes(uid)) distributionsInternalIds.push(uid);
-      if (!selectedUserIds.includes(uid)) selectedUserIds.push(uid);
-      if (!finalSelectedUsers.some(u => String(u.id) === String(uid))){
-        const found = (Object.values(departmentUsers).flat().find(u => String(u.id) === String(uid)) || (Array.isArray(allUsersCache) ? allUsersCache.find(u=>String(u.id)===String(uid)) : null));
-        finalSelectedUsers.push({ id: uid, name: found?.name || ('User #' + uid), email: found?.email || '' });
-      }
-    });
-    // clear temp selection and uncheck
-    tempSelectedIds = [];
-    $('#usersBox input[type=checkbox]').prop('checked', false);
-    $('#selectAllUsers').prop('checked', false);
-    renderUsersBox();
-    renderSelectedTargetPreview();
-  });
-
-  $('#btn-add-to-regards').on('click', function(){
-    if (!tempSelectedIds.length) { toastr.info('Select internal users first'); return; }
-    tempSelectedIds.forEach(function(idStr){
-      const uid = Number(idStr);
-      if (!uid) return;
-      if (!regardsInternalIds.includes(uid)) regardsInternalIds.push(uid);
-      if (!selectedUserIds.includes(uid)) selectedUserIds.push(uid);
-      if (!finalSelectedUsers.some(u => String(u.id) === String(uid))){
-        const found = (Object.values(departmentUsers).flat().find(u => String(u.id) === String(uid)) || (Array.isArray(allUsersCache) ? allUsersCache.find(u=>String(u.id)===String(uid)) : null));
-        finalSelectedUsers.push({ id: uid, name: found?.name || ('User #' + uid), email: found?.email || '' });
-      }
-    });
-    // clear temp selection and uncheck
-    tempSelectedIds = [];
-    $('#usersBox input[type=checkbox]').prop('checked', false);
-    $('#selectAllUsers').prop('checked', false);
-    renderUsersBox();
-    renderSelectedTargetPreview();
-  });
-
-  // remove recipient from internal preview
-  $(document).on('click', '.btn-remove-internal', function(){
-    const id = Number($(this).attr('data-id'));
-    if (!id) return;
-    distributionsInternalIds = distributionsInternalIds.filter(x => Number(x) !== id);
-    regardsInternalIds = regardsInternalIds.filter(x => Number(x) !== id);
-    finalSelectedUsers = finalSelectedUsers.filter(u => String(u.id) !== String(id));
-    selectedUserIds = selectedUserIds.filter(x => String(x) !== String(id));
-    tempSelectedIds = tempSelectedIds.filter(x => String(x) !== String(id));
-    renderUsersBox();
-    renderSelectedTargetPreview();
-  });
-
-  // when department checkbox changes -> load users
-  $(document).on('change', '.dept-checkbox', function(){
-    const depId = $(this).val();
-    const checked = $(this).is(':checked');
-    if (checked) {
-      fetchDepartmentUsers(depId).then(()=> renderUsersBox());
-    } else {
-      delete departmentUsers[depId];
-      renderUsersBox();
-    }
-
-    // sync master
-    const total = $('#departmentsBox .dept-checkbox').length;
-    const selected = $('#departmentsBox .dept-checkbox:checked').length;
-    $('#selectAllDepartments').prop('checked', total > 0 && total === selected);
-  });
-
-  // when user-checkbox toggled -> update ONLY tempSelectedIds
-  $(document).on('change', '.user-checkbox', function(){
-    const raw = $(this).attr('data-id') || $(this).val();
-    const id = raw == null ? '' : String(raw);
-    if (!id) return;
-    const isChecked = $(this).is(':checked');
-
-    if (isChecked) {
-      if (!tempSelectedIds.includes(id)) tempSelectedIds.push(id);
-    } else {
-      tempSelectedIds = tempSelectedIds.filter(x => String(x) !== id);
-    }
-  });
-
   // ---------- UI pieces ----------
   function renderUsersBox(){
     const $box = $('#usersBox').empty();
     const users = Object.values(departmentUsers).flat();
-    if (!users.length){ $box.html('<small class="text-muted">No users for selected departments</small>'); return; }
+
+    if (!users.length){
+      $box.html('<small class="text-muted">No users for selected departments</small>');
+      return;
+    }
+
     const map = {};
     users.forEach(u => { if (u && u.id !== undefined) map[String(u.id)] = u; });
+
     Object.keys(map).forEach(k => {
       const u = map[k];
       const isChecked = tempSelectedIds.some(x => String(x) === String(u.id));
-      const alreadyAdded = distributionsInternalIds.some(x => String(x)===String(u.id)) || regardsInternalIds.some(x => String(x)===String(u.id));
+      const alreadyAdded =
+        distributionsInternalIds.some(x => String(x)===String(u.id)) ||
+        regardsInternalIds.some(x => String(x)===String(u.id));
+
       const addedBadge = alreadyAdded ? ' <span class="badge bg-info ms-2" style="font-size:10px">added</span>' : '';
 
       const $input = $('<input>')
@@ -980,123 +789,255 @@
     });
   }
 
-  // Select all / clear handlers
+  // dept -> load users
+  $(document).on('change', '.dept-checkbox', function(){
+    const depId = $(this).val();
+    const checked = $(this).is(':checked');
+
+    if (checked) {
+      fetchDepartmentUsers(depId).then(()=> renderUsersBox());
+    } else {
+      delete departmentUsers[depId];
+      renderUsersBox();
+    }
+
+    const total = $('#departmentsBox .dept-checkbox').length;
+    const selected = $('#departmentsBox .dept-checkbox:checked').length;
+    $('#selectAllDepartments').prop('checked', total > 0 && total === selected);
+  });
+
+  // user checkbox temp selection
+  $(document).on('change', '.user-checkbox', function(){
+    const raw = $(this).attr('data-id') || $(this).val();
+    const id = raw == null ? '' : String(raw);
+    if (!id) return;
+
+    const isChecked = $(this).is(':checked');
+
+    if (isChecked) {
+      if (!tempSelectedIds.includes(id)) tempSelectedIds.push(id);
+    } else {
+      tempSelectedIds = tempSelectedIds.filter(x => String(x) !== id);
+    }
+  });
+
+  // Select all / clear
   $(document).on('change', '#selectAllUsers', function(){
     const checked = $(this).is(':checked');
-    isBulkSelecting = true;
     $('#usersBox .user-checkbox').each(function(){
       $(this).prop('checked', checked).trigger('change');
     });
-    isBulkSelecting = false;
   });
 
   $(document).on('click', '#clearUserSelection', function(e){
     e.preventDefault();
-    isBulkSelecting = true;
     $('#usersBox .user-checkbox').each(function(){
       $(this).prop('checked', false).trigger('change');
     });
     $('#selectAllUsers').prop('checked', false);
-    isBulkSelecting = false;
+  });
+
+  // ---------- external add/remove ----------
+  $('#btn-add-dist-ext').on('click', function(){
+    const name = ($('#dist_ext_name').val()||'').trim();
+    const designation = ($('#dist_ext_designation').val()||'').trim();
+    if (!name) { toastr.error('Name required'); return; }
+    const obj = { _uid: uid(), name, designation };
+    distributionsExternal.push(obj);
+    externalUsers.push({ _uid: obj._uid, name: obj.name, email: '' });
+    $('#dist_ext_name').val(''); $('#dist_ext_designation').val('');
+    renderDistExternalList(); renderSelectedTargetPreview();
+  });
+
+  $('#btn-add-reg-ext').on('click', function(){
+    const name = ($('#reg_ext_name').val()||'').trim();
+    const designation = ($('#reg_ext_designation').val()||'').trim();
+    const note = ($('#reg_ext_note').val()||'').trim();
+    if (!name) { toastr.error('Name required'); return; }
+    const obj = { _uid: uid(), name, designation, note };
+    regardsExternal.push(obj);
+    externalUsers.push({ _uid: obj._uid, name: obj.name, email: '' });
+    $('#reg_ext_name').val(''); $('#reg_ext_designation').val(''); $('#reg_ext_note').val('');
+    renderRegExternalList(); renderSelectedTargetPreview();
+  });
+
+  $(document).on('click', '.btn-remove-dist-ext', function(){
+    const u = $(this).attr('data-uid');
+    distributionsExternal = distributionsExternal.filter(x => x._uid !== u);
+    externalUsers = externalUsers.filter(e => e._uid !== u);
+    renderDistExternalList(); renderSelectedTargetPreview();
+  });
+
+  $(document).on('click', '.btn-remove-reg-ext', function(){
+    const u = $(this).attr('data-uid');
+    regardsExternal = regardsExternal.filter(x => x._uid !== u);
+    externalUsers = externalUsers.filter(e => e._uid !== u);
+    renderRegExternalList(); renderSelectedTargetPreview();
+  });
+
+  $(document).on('click', '.btn-remove-external', function(){
+    const u = $(this).attr('data-uid');
+    distributionsExternal = distributionsExternal.filter(x => x._uid !== u);
+    regardsExternal = regardsExternal.filter(x => x._uid !== u);
+    externalUsers = externalUsers.filter(e => e._uid !== u);
+    renderDistExternalList();
+    renderRegExternalList();
+    renderSelectedTargetPreview();
+  });
+
+  // ---------- add selected internal users to Distributions / Regards ----------
+  $('#btn-add-to-distributions').on('click', function(){
+    if (!tempSelectedIds.length) { toastr.info('Select internal users first'); return; }
+
+    tempSelectedIds.forEach(function(idStr){
+      const uidNum = Number(idStr);
+      if (!uidNum) return;
+
+      if (!distributionsInternalIds.includes(uidNum)) distributionsInternalIds.push(uidNum);
+      if (!selectedUserIds.includes(uidNum)) selectedUserIds.push(uidNum);
+
+      if (!finalSelectedUsers.some(u => String(u.id) === String(uidNum))){
+        const found = (Object.values(departmentUsers).flat().find(u => String(u.id) === String(uidNum)) ||
+                      (Array.isArray(allUsersCache) ? allUsersCache.find(u => String(u.id) === String(uidNum)) : null));
+        finalSelectedUsers.push({ id: uidNum, name: found?.name || ('User #' + uidNum), email: found?.email || '' });
+      }
+    });
+
+    tempSelectedIds = [];
+    $('#usersBox input[type=checkbox]').prop('checked', false);
+    $('#selectAllUsers').prop('checked', false);
+
+    renderUsersBox();
+    renderSelectedTargetPreview();
+  });
+
+  $('#btn-add-to-regards').on('click', function(){
+    if (!tempSelectedIds.length) { toastr.info('Select internal users first'); return; }
+
+    tempSelectedIds.forEach(function(idStr){
+      const uidNum = Number(idStr);
+      if (!uidNum) return;
+
+      if (!regardsInternalIds.includes(uidNum)) regardsInternalIds.push(uidNum);
+      if (!selectedUserIds.includes(uidNum)) selectedUserIds.push(uidNum);
+
+      if (!finalSelectedUsers.some(u => String(u.id) === String(uidNum))){
+        const found = (Object.values(departmentUsers).flat().find(u => String(u.id) === String(uidNum)) ||
+                      (Array.isArray(allUsersCache) ? allUsersCache.find(u => String(u.id) === String(uidNum)) : null));
+        finalSelectedUsers.push({ id: uidNum, name: found?.name || ('User #' + uidNum), email: found?.email || '' });
+      }
+    });
+
+    tempSelectedIds = [];
+    $('#usersBox input[type=checkbox]').prop('checked', false);
+    $('#selectAllUsers').prop('checked', false);
+
+    renderUsersBox();
+    renderSelectedTargetPreview();
+  });
+
+  // remove from internal preview
+  $(document).on('click', '.btn-remove-internal', function(){
+    const id = Number($(this).attr('data-id'));
+    if (!id) return;
+
+    distributionsInternalIds = distributionsInternalIds.filter(x => Number(x) !== id);
+    regardsInternalIds = regardsInternalIds.filter(x => Number(x) !== id);
+    finalSelectedUsers = finalSelectedUsers.filter(u => String(u.id) !== String(id));
+    selectedUserIds = selectedUserIds.filter(x => String(x) !== String(id));
+    tempSelectedIds = tempSelectedIds.filter(x => String(x) !== String(id));
+
+    renderUsersBox();
+    renderSelectedTargetPreview();
   });
 
   // ---------- submit handling ----------
   $('#btn-save-draft').on('click', function(){
     submitNotice('draft');
   });
-  
-  $('#noticeForm').on('submit', function(e){ 
-    e.preventDefault(); 
-    submitNotice('publish'); 
+
+  $('#noticeForm').on('submit', function(e){
+    e.preventDefault();
+    submitNotice('publish');
   });
 
-function submitNotice(type){
+  function submitNotice(type){
     $('#btn-publish, #btn-save-draft').prop('disabled', true);
+
     const id = $('#notice_id').val();
     const formData = new FormData();
 
     formData.append('memorial_no', $('#memorial_no').val() || '');
     formData.append('date', $('#notice_date').val() || '');
     formData.append('subject', $('#subject').val() || '');
+
     const bodyHtml = (quill && quill.root) ? quill.root.innerHTML : ($('#bodyInput').val() || '');
     const signatureHtml = (quillSignature && quillSignature.root) ? quillSignature.root.innerHTML : ($('#signatureInput').val() || '');
+
     formData.append('body', bodyHtml);
     formData.append('signature_body', signatureHtml || '');
 
-    // Set status based on user role and type
-    if (userRole === 'PO') {
-        if (type === 'publish') {
-            // PO submits for approval (pending status)
-            formData.append('status', 'pending');
-            formData.append('approval_status', 'pending');
-            toastr.info('Notice submitted for approval to AEPD');
-        } else {
-            // PO saves as draft
-            formData.append('status', 'draft');
-            formData.append('approval_status', 'draft'); // Important: draft status for draft
-            toastr.info('Notice saved as draft');
-        }
+    // ✅ UPDATED: no approval workflow now
+    if (type === 'publish') {
+      formData.append('status', 'published');
     } else {
-        // Admin, AEPD, Super Admin can publish directly
-        if (type === 'publish') {
-            formData.append('status', 'published');
-            formData.append('approval_status', 'approved');
-            toastr.success('Notice published successfully');
-        } else {
-            formData.append('status', 'draft');
-            formData.append('approval_status', 'draft');
-            toastr.info('Notice saved as draft');
-        }
+      formData.append('status', 'draft');
     }
 
-    // departments
-    $('.dept-checkbox:checked').each(function(i, el){ 
-      formData.append('departments['+i+']', $(el).val()); 
+    // departments (kept as-is)
+    $('.dept-checkbox:checked').each(function(i, el){
+      formData.append('departments['+i+']', $(el).val());
     });
 
-    // distributions.internal_user_ids
+    // distributions/internal
     distributionsInternalIds.forEach((uid, idx) => {
       formData.append(`distributions[internal_user_ids][${idx}]`, uid);
     });
-    
-    // distributions.external_users -> name/designation
+
+    // distributions/external
     distributionsExternal.forEach((u, idx) => {
       formData.append(`distributions[external_users][${idx}][name]`, u.name);
       formData.append(`distributions[external_users][${idx}][designation]`, u.designation || '');
     });
 
-    // regards.internal_user_ids
+    // regards/internal
     regardsInternalIds.forEach((uid, idx) => {
       formData.append(`regards[internal_user_ids][${idx}]`, uid);
     });
-    
-    // regards.external_users -> name/designation/note
+
+    // regards/external
     regardsExternal.forEach((u, idx) => {
       formData.append(`regards[external_users][${idx}][name]`, u.name);
       formData.append(`regards[external_users][${idx}][designation]`, u.designation || '');
       formData.append(`regards[external_users][${idx}][note]`, u.note || '');
     });
 
-    // method spoof on update
-   if (id) formData.append('_method','PUT');
+    if (id) formData.append('_method','PUT');
 
-  const url = id ? API_BASE + '/notice-templates/' + id : API_BASE + '/notice-templates';
-  
-  $.ajax({
+    const url = id ? API_BASE + '/notice-templates/' + id : API_BASE + '/notice-templates';
+
+    $.ajax({
       url: url,
       method: 'POST',
       data: formData,
       processData: false,
       contentType: false,
-      success: function(res){
-          t('Saved','success');
-          const noticeModalEl = document.getElementById('noticeModal');
-          const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null;
-          if (instance) instance.hide(); else $('#noticeModal').hide();
-          loadNotices();
+      success: function(){
+        const msg = (type === 'publish')
+          ? (id ? 'Notice updated & published' : 'Notice published successfully')
+          : 'Draft saved';
+
+        t(msg, 'success');
+
+        const noticeModalEl = document.getElementById('noticeModal');
+        const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null;
+        if (instance) instance.hide(); else $('#noticeModal').hide();
+
+        loadNotices();
       },
       error: function(err){
         console.error('submitNotice failed', err);
+
         let messages = [];
         if (err && err.responseJSON) {
           const json = err.responseJSON;
@@ -1117,27 +1058,17 @@ function submitNotice(type){
 
         const html = '<div style="text-align:left;">' + messages.map(m => '<div>• ' + escapeHtml(String(m)) + '</div>').join('') + '</div>';
 
-        const noticeModalEl = document.getElementById('noticeModal');
-        const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null;
-        if (instance) instance.show();
-
         Swal.fire({
           title: 'Save failed',
           html: html,
           icon: 'error',
           confirmButtonText: 'OK'
-        }).then(function(){
-          const $firstInvalid = $('#noticeForm').find('input, textarea, select').filter(function(){
-            try { return !this.checkValidity(); } catch(e){ return false; }
-          }).first();
-          if ($firstInvalid.length) $firstInvalid.focus();
-          else $('#memorial_no').focus();
         });
 
         t(messages[0] || 'Save failed', 'error');
       },
-      complete: function(){ 
-        $('#btn-publish, #btn-save-draft').prop('disabled', false); 
+      complete: function(){
+        $('#btn-publish, #btn-save-draft').prop('disabled', false);
       }
     });
   }
@@ -1146,6 +1077,7 @@ function submitNotice(type){
   $(document).on('click', '.btn-delete', function(){
     const id = $(this).data('id');
     if (!id) { t('Invalid id','error'); return; }
+
     Swal.fire({
       title: 'Delete notice?',
       text: 'This action cannot be undone.',
@@ -1155,26 +1087,21 @@ function submitNotice(type){
       confirmButtonColor: '#d33'
     }).then(function(result){
       if (!result.isConfirmed) return;
+
       $.ajax({ url: API_BASE + '/notice-templates/' + id, method: 'DELETE' })
-        .done(function(res){ t((res && res.message) || 'Deleted', 'success'); loadNotices(); })
-        .fail(function(err){
-          console.warn('DELETE failed, trying PATCH fallback', err);
-          $.ajax({ url: API_BASE + '/notice-templates/' + id, method: 'PATCH' })
-            .done(function(r){ t((r && r.message) || 'Deleted (fallback)', 'success'); loadNotices(); })
-            .fail(function(err2){
-              console.error('Delete failed', err2);
-              const serverMsg = (err2 && err2.responseJSON && err2.responseJSON.message) || err2.responseText || err2.statusText || 'Delete failed';
-              Swal.fire({ title: 'Delete failed', html: '<pre style="text-align:left;white-space:pre-wrap">' + escapeHtml(String(serverMsg)) + '</pre>', icon: 'error' });
-              t('Delete failed','error');
-            });
+        .done(function(){ t('Deleted', 'success'); loadNotices(); })
+        .fail(function(err2){
+          const serverMsg = (err2 && err2.responseJSON && err2.responseJSON.message) || err2.responseText || err2.statusText || 'Delete failed';
+          Swal.fire({ title: 'Delete failed', html: '<pre style="text-align:left;white-space:pre-wrap">' + escapeHtml(String(serverMsg)) + '</pre>', icon: 'error' });
+          t('Delete failed','error');
         });
     });
   });
 
-  // modal delete
   $('#btn-delete-notice').on('click', function(){
     const id = $('#notice_id').val();
     if (!id) return;
+
     Swal.fire({
       title: 'Delete this notice?',
       text: 'This cannot be undone.',
@@ -1184,101 +1111,20 @@ function submitNotice(type){
       confirmButtonColor: '#d33'
     }).then(function(result){
       if (!result.isConfirmed) return;
+
       $.ajax({ url: API_BASE + '/notice-templates/' + id, method: 'DELETE' })
-        .done(function(res){ 
-          t((res && res.message) || 'Deleted', 'success'); 
+        .done(function(){
+          t('Deleted', 'success');
           const noticeModalEl = document.getElementById('noticeModal');
-          const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null; 
-          if(instance) instance.hide(); 
-          loadNotices(); 
-        })
-        .fail(function(err){
-          console.warn('Modal DELETE failed, trying PATCH fallback', err);
-          $.ajax({ url: API_BASE + '/notice-templates/' + id, method: 'PATCH' })
-            .done(function(r){ 
-              t((r && r.message) || 'Deleted (fallback)', 'success'); 
-              const noticeModalEl = document.getElementById('noticeModal');
-              const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null; 
-              if (instance) instance.hide(); 
-              loadNotices(); 
-            })
-            .fail(function(err2){
-              console.error('Modal delete failed', err2);
-              const serverMsg = (err2 && err2.responseJSON && err2.responseJSON.message) || err2.responseText || err2.statusText || 'Delete failed';
-              Swal.fire({ title: 'Delete failed', html: '<pre style="text-align:left;white-space:pre-wrap">' + escapeHtml(String(serverMsg)) + '</pre>', icon: 'error' });
-              t('Delete failed','error');
-            });
-        });
-    });
-  });
-
-  // Approve notice handler
-  $(document).on('click', '.btn-approve', function(){
-    const id = $(this).data('id');
-    if (!id) return;
-    
-    Swal.fire({
-      title: 'Approve Notice?',
-      text: 'This will publish the notice and make it visible to all users.',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Yes, Approve',
-      confirmButtonColor: '#28a745'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        $.ajax({
-          url: API_BASE + '/notice-templates/' + id + '/approve',
-          method: 'POST'
-        })
-        .done(function(res){
-          toastr.success('Notice approved successfully');
+          const instance = noticeModalEl ? bootstrap.Modal.getOrCreateInstance(noticeModalEl) : null;
+          if (instance) instance.hide();
           loadNotices();
         })
-        .fail(function(err){
-          toastr.error('Failed to approve notice');
-          console.error(err);
+        .fail(function(err2){
+          const serverMsg = (err2 && err2.responseJSON && err2.responseJSON.message) || err2.responseText || err2.statusText || 'Delete failed';
+          Swal.fire({ title: 'Delete failed', html: '<pre style="text-align:left;white-space:pre-wrap">' + escapeHtml(String(serverMsg)) + '</pre>', icon: 'error' });
+          t('Delete failed','error');
         });
-      }
-    });
-  });
-
-  // Reject notice handler
-  $(document).on('click', '.btn-reject', function(){
-    const id = $(this).data('id');
-    if (!id) return;
-    
-    Swal.fire({
-      title: 'Reject Notice?',
-      input: 'textarea',
-      inputLabel: 'Reason for rejection',
-      inputPlaceholder: 'Enter the reason for rejection...',
-      inputAttributes: { 'maxlength': '500' },
-      showCancelButton: true,
-      confirmButtonText: 'Reject',
-      confirmButtonColor: '#dc3545',
-      preConfirm: (reason) => {
-        if (!reason || reason.trim().length === 0) {
-          Swal.showValidationMessage('Please enter a reason for rejection');
-          return false;
-        }
-        return reason;
-      }
-    }).then((result) => {
-      if (result.isConfirmed) {
-        $.ajax({
-          url: API_BASE + '/notice-templates/' + id + '/reject',
-          method: 'POST',
-          data: { rejection_reason: result.value }
-        })
-        .done(function(res){
-          toastr.success('Notice rejected');
-          loadNotices();
-        })
-        .fail(function(err){
-          toastr.error('Failed to reject notice');
-          console.error(err);
-        });
-      }
     });
   });
 
@@ -1289,27 +1135,28 @@ function submitNotice(type){
     const $btn = $(this);
     const id = $btn.data('id');
     if(!id) { t('Invalid id','error'); return; }
+
     $btn.prop('disabled', true);
+
     fetchNoticeById(id)
       .done(function(data){
-        const notice = (data && data.data) ? data.data : (data || {});
-        openNoticeModal(notice);
+        openNoticeModal(data || {});
       })
       .fail(function(err){
         console.error('fetchNoticeById failed', err);
         const serverMsg = (err && err.responseJSON && err.responseJSON.message) || err.responseText || err.statusText || 'Failed to load notice';
         Swal.fire({ title: 'Could not load notice', html: '<pre style="text-align:left;white-space:pre-wrap">' + escapeHtml(String(serverMsg)) + '</pre>', icon: 'error' });
-        t('Failed to load notice (see details)','error');
+        t('Failed to load notice', 'error');
       })
       .always(function(){ $btn.prop('disabled', false); });
   });
 
-  // init
-  loadNotices();
-  loadDepartments();
-
   // refresh
   $('#btn-refresh').on('click', function(){ loadNotices(); });
+
+  // boot
+  loadNotices();
+  loadDepartments();
 
 })(jQuery);
 </script>

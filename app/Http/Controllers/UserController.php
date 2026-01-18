@@ -39,6 +39,46 @@ class UserController extends Controller
                 );
             }
 
+            $list = User::query()
+                ->with(['department', 'designation', 'roles'])
+                ->where('status', 'Active')
+                ->where('is_active', 1);
+
+            //  optional filters (won’t affect existing calls)
+            if ($request->filled('department_id')) {
+                $list->where('department_id', (int) $request->department_id);
+            }
+
+            if ($request->filled('designation_id')) {
+                $list->where('designation_id', (int) $request->designation_id);
+            }
+
+            if ($request->filled('role')) {
+                $role = trim((string) $request->role);
+                $list->whereHas('roles', fn($q) => $q->where('name', $role));
+            }
+
+            if ($request->filled('search_term')) {
+                $term = trim((string) $request->search_term);
+                $list->where(function ($q) use ($term) {
+                    $q->where('name', 'like', "%{$term}%")
+                    ->orWhere('email', 'like', "%{$term}%")
+                    ->orWhere('phone', 'like', "%{$term}%");
+                });
+            }
+
+        //  optional sorting (safe whitelist)
+        $sortBy  = (string) $request->input('sort_by', 'id');
+        $sortDir = strtolower((string) $request->input('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $allowedSort = ['id', 'name', 'email'];
+        if (!in_array($sortBy, $allowedSort, true)) $sortBy = 'id';
+
+        $list = $list->orderBy($sortBy, $sortDir)
+            ->paginate($perPage, ['*'], 'page', $page);
+
+            // OPTIONAL: add running index `i` across pages
+
             return response()->json([
                 'success' => true,
                 'data'    => $list,
