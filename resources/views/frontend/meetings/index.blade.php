@@ -362,10 +362,10 @@ $(function(){
     dayCellClassNames:   arg => isBdWeekend(arg.date) ? ['bd-weekend-cell'] : [],
 
     dateClick: function(info){
-      if (isBdWeekend(info.date)) {
-        t('warning', 'Weekend (Friday/Saturday) — meeting create করা যাবে না.');
-        return;
-      }
+      // if (isBdWeekend(info.date)) {
+      //   t('warning', 'Weekend (Friday/Saturday) — meeting create করা যাবে না.');
+      //   return;
+      // }
       openCreateModal(info.dateStr);
     },
 
@@ -834,10 +834,10 @@ $(function(){
 
   function openCreateModal(dateStr){
    // ✅ stop if weekend (Fri/Sat)
-    if (dateStr && isBdWeekend(dateStr)) {
-      t('warning', 'Weekend (Friday/Saturday) — meeting create করা যাবে না.');
-      return;
-    }
+    // if (dateStr && isBdWeekend(dateStr)) {
+    //   t('warning', 'Weekend (Friday/Saturday) — meeting create করা যাবে না.');
+    //   return;
+    // }
 
     currentEvent = null;
     $('#meetingModalTitle').text('Create Meeting');
@@ -1150,11 +1150,11 @@ $(function(){
     e.preventDefault();
     $('#btn-save').prop('disabled', true);
     const dateVal = $('#date').val();
-    if (isBdWeekend(dateVal)) {
-      t('error', 'Weekend (Friday/Saturday) এ meeting save করা যাবে না.');
-      $('#btn-save').prop('disabled', false);
-      return;
-    }
+    // if (isBdWeekend(dateVal)) {
+    //   t('error', 'Weekend (Friday/Saturday) এ meeting save করা যাবে না.');
+    //   $('#btn-save').prop('disabled', false);
+    //   return;
+    // }
     
     const recordId = $('#form_meeting_record_id').val();
     const fd = new FormData();
