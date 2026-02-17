@@ -14,6 +14,12 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::view('/notice-privacy-policy', 'notice-privacy-policy')
+    ->name('notice.privacy.policy');
+
+Route::view('/notice-terms-conditions', 'notice-terms-conditions')
+    ->name('notice.terms.conditions');
+
 Route::get('/login', fn () => redirect()->route('ext.login'))->name('login.form');
 // External Views
 Route::view('/ext/login', 'frontend.ext.login')->name('ext.login');

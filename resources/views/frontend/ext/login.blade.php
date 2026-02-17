@@ -83,9 +83,9 @@
           </div>
         </div>
 
-        <div class="text-center mt-3 text-muted small">
+        {{-- <div class="text-center mt-3 text-muted small">
           @include('backend.partials.footer')
-        </div>
+        </div> --}}
       </div>
     </div>
   </div>

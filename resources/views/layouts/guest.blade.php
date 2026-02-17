@@ -28,10 +28,62 @@
 
 </head>
 
+<style>
+  /* keep footer always visible and avoid overlap */
+  body { padding-bottom: 70px; }
+
+  .guest-footer{
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 1030;
+    background: rgba(255,255,255,.78);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(0,0,0,.06);
+  }
+
+  .guest-footer a{
+    color: #0d6efd;
+    font-weight: 500;
+  }
+  .guest-footer a:hover{
+    text-decoration: underline !important;
+  }
+
+  @media (max-width: 576px){
+    body { padding-bottom: 90px; }
+  }
+</style>
+
 <body>
     <div class="font-sans text-gray-900 antialiased">
         @yield('content')
     </div>
+
+    <footer class="guest-footer py-2">
+      <div class="container">
+        <div class="row justify-content-center">
+          {{-- match login card width --}}
+          <div class="col-lg-10 col-xl-9">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+              <div class="text-muted small text-center text-md-start">
+                @include('backend.partials.footer')
+              </div>
+
+              <div class="small d-flex gap-3 justify-content-center">
+                <a class="text-decoration-none" href="{{ route('notice.terms.conditions') }}">
+                  Terms &amp; Conditions
+                </a>
+                <span class="text-muted">|</span>
+                <a class="text-decoration-none" href="{{ route('notice.privacy.policy') }}">
+                  Privacy Policy
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+
 
     @livewireScripts
     <!-- MDB -->
