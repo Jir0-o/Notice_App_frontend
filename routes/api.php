@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\MeetingAvailabilityController;
 use App\Http\Controllers\Api\NoticeTemplateController;
 use App\Http\Controllers\Api\MeetingAttachmentController;
 use App\Http\Controllers\Api\MeetingReminderCronController;
+use App\Http\Controllers\Api\V1\AppUpdateCheckController;
 
 /*
 |--------------------------------------------------------------------------
@@ -34,6 +35,10 @@ Route::group(['prefix'=>'auth'], function(){
     Route::post('/register', [SanctumAuthController::class, 'store']);
     Route::post('/login', [SanctumAuthController::class, 'login'])->name('login');
     Route::post('/logout', [SanctumAuthController::class, 'logout'])->middleware('auth:sanctum')->name('logout');
+});
+
+Route::prefix('v1')->group(function () {
+    Route::match(['get', 'post'], '/app-update/check', [AppUpdateCheckController::class, 'check']);
 });
 
 //notice

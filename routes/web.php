@@ -7,6 +7,7 @@ use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Carbon\Carbon;
 use App\Models\MeetingDetail;
+use App\Http\Controllers\Admin\AppUpdateController;
 
 
 // Home Route
@@ -19,6 +20,18 @@ Route::view('/notice-privacy-policy', 'notice-privacy-policy')
 
 Route::view('/notice-terms-conditions', 'notice-terms-conditions')
     ->name('notice.terms.conditions');
+
+
+Route::prefix('admin')->name('admin.')->group(function () {
+    Route::get('/app-updates', [AppUpdateController::class, 'index'])
+        ->name('app-updates.index');
+
+    Route::post('/app-updates', [AppUpdateController::class, 'store'])
+        ->name('app-updates.store');
+
+    Route::delete('/app-updates/{appUpdate}', [AppUpdateController::class, 'destroy'])
+        ->name('app-updates.destroy');
+});
 
 Route::get('/login', fn () => redirect()->route('ext.login'))->name('login.form');
 // External Views

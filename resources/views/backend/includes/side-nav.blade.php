@@ -123,6 +123,13 @@
         <div data-i18n="Profile">My profile</div>
       </a>
     </li>
+
+    <li class="menu-item menu-by-role" data-role="Super Admin" id="menu-app-update">
+      <a href="{{ route('admin.app-updates.index') }}" class="menu-link">
+        <i class="menu-icon tf-icons bx bx-upgrade"></i>
+        <div data-i18n="App Update">App Update</div>
+      </a>
+    </li>
   </ul>
 </aside>
 
