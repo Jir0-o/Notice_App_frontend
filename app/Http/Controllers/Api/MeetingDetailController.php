@@ -47,22 +47,21 @@ class MeetingDetailController extends Controller
 			$q->where('meeting_id', (int) $mid);
 		}
 
-
 		// FullCalendar "end" is EXCLUSIVE, so use < end
 		$fcStart = $request->query('start'); // YYYY-MM-DD
-		$fcEnd   = $request->query('end');   // YYYY-MM-DD (exclusive)
+		$fcEnd   = $request->query('end');   // YYYY-MM-DD exclusive
 
 		if ($fcStart && $fcEnd) {
 			$q->whereDate('date', '>=', $fcStart)
-			->whereDate('date', '<',  $fcEnd);
+				->whereDate('date', '<', $fcEnd);
 		} else {
-			// Existing date range filters (list screens)
+			// Existing date range filters
 			$from = $request->query('date_from');
 			$to   = $request->query('date_to');
 
 			if ($from && $to) {
 				$q->whereDate('date', '>=', $from)
-				->whereDate('date', '<=', $to);
+					->whereDate('date', '<=', $to);
 			} elseif ($from) {
 				$q->whereDate('date', '>=', $from);
 			} elseif ($to) {
@@ -70,26 +69,26 @@ class MeetingDetailController extends Controller
 			}
 		}
 
-		// Upcoming / Past using (date, start_time)
-		$now     = Carbon::now();
-		$today   = $now->toDateString();
-		$nowH_i  = $now->format('H:i');
+		// Upcoming / Past using date and start_time
+		$now    = Carbon::now();
+		$today  = $now->toDateString();
+		$nowH_i = $now->format('H:i');
 
 		if ($request->boolean('upcoming')) {
 			$q->where(function ($w) use ($today, $nowH_i) {
 				$w->whereDate('date', '>', $today)
-				->orWhere(function ($x) use ($today, $nowH_i) {
-					$x->whereDate('date', $today)
-						->where('start_time', '>=', $nowH_i);
-				});
+					->orWhere(function ($x) use ($today, $nowH_i) {
+						$x->whereDate('date', $today)
+							->where('start_time', '>=', $nowH_i);
+					});
 			});
 		} elseif ($request->boolean('past')) {
 			$q->where(function ($w) use ($today, $nowH_i) {
 				$w->whereDate('date', '<', $today)
-				->orWhere(function ($x) use ($today, $nowH_i) {
-					$x->whereDate('date', $today)
-						->where('start_time', '<', $nowH_i);
-				});
+					->orWhere(function ($x) use ($today, $nowH_i) {
+						$x->whereDate('date', $today)
+							->where('start_time', '<', $nowH_i);
+					});
 			});
 		}
 
@@ -97,22 +96,32 @@ class MeetingDetailController extends Controller
 		$sort = (string) $request->query('sort', 'date');
 		$dir  = str_starts_with($sort, '-') ? 'desc' : 'asc';
 		$col  = ltrim($sort, '-');
-		if (!in_array($col, ['date','start_time','title','created_at'], true)) {
+
+		if (!in_array($col, ['date', 'start_time', 'title', 'created_at'], true)) {
 			$col = 'date';
 		}
+
 		$q->orderBy($col, $dir);
 
-		if ($col !== 'date')       $q->orderBy('date', 'asc');
-		if ($col !== 'start_time') $q->orderBy('start_time', 'asc');
+		if ($col !== 'date') {
+			$q->orderBy('date', 'asc');
+		}
+
+		if ($col !== 'start_time') {
+			$q->orderBy('start_time', 'asc');
+		}
 
 		// ---- Includes ----
 		$include = (string) $request->query('include');
+
 		if (str_contains($include, 'propagations')) {
 			$q->with('propagations');
 		}
+
 		if (str_contains($include, 'meeting')) {
 			$q->with('meeting:id,title,capacity,is_active');
 		}
+
 		if (str_contains($include, 'meetingChair')) {
 			$q->with('meetingChair:id,name,email');
 		}
@@ -120,43 +129,20 @@ class MeetingDetailController extends Controller
 		// Counts
 		$q->withCount('propagations', 'meetingAttachments');
 
-
-		if ($fcStart && $fcEnd) {
-			$rows = $q->get();
-
-			return response()->json([
-				'data'  => \App\Http\Resources\MeetingDetailResource::collection($rows),
-				'ok'    => true,
-				'mode'  => 'range',
-				'range' => ['start' => $fcStart, 'end' => $fcEnd],
-				'total' => $rows->count(),
-				'sort'    => $sort,
-				'include' => $include,
-			]);
-		}
-
-		// ---- Pagination (list mode) ----
-		$perPage   = (int) $request->query('per_page', 15);
-		$page      = (int) $request->query('page', 1);
-		$paginator = $q->paginate($perPage, ['*'], 'page', $page)->appends($request->query());
+		// ---- Get all data, no pagination ----
+		$rows = $q->get();
 
 		return response()->json([
-			'data'  => \App\Http\Resources\MeetingDetailResource::collection($paginator->items()),
-			'ok'    => true,
-			'mode'  => 'paginate',
+			'data' => \App\Http\Resources\MeetingDetailResource::collection($rows),
+			'ok'   => true,
+			'mode' => ($fcStart && $fcEnd) ? 'range' : 'all',
 
-			'links' => [
-				'first' => $paginator->url(1),
-				'last'  => $paginator->url($paginator->lastPage()),
-				'prev'  => $paginator->previousPageUrl(),
-				'next'  => $paginator->nextPageUrl(),
-			],
-			'current_page' => $paginator->currentPage(),
-			'from'         => $paginator->firstItem(),
-			'to'           => $paginator->lastItem(),
-			'per_page'     => $paginator->perPage(),
-			'total'        => $paginator->total(),
-			'last_page'    => $paginator->lastPage(),
+			'total' => $rows->count(),
+
+			'range' => ($fcStart && $fcEnd) ? [
+				'start' => $fcStart,
+				'end'   => $fcEnd,
+			] : null,
 
 			'filters' => [
 				'search'     => $request->query('search'),
@@ -166,6 +152,7 @@ class MeetingDetailController extends Controller
 				'upcoming'   => $request->query('upcoming'),
 				'past'       => $request->query('past'),
 			],
+
 			'sort'    => $sort,
 			'include' => $include,
 		]);

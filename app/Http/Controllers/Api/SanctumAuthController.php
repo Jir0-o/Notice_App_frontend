@@ -241,9 +241,13 @@ class SanctumAuthController extends Controller
             if ($allDevices) {
                 // Logout from all devices
                 $request->user()->tokens()->delete();
+                $request->user()->fcm_token = null; // Clear FCM token
+                $request->user()->save();
             } else {
                 // Logout from current device only
                 $request->user()->currentAccessToken()->delete();
+                $request->user()->fcm_token = null; // Clear FCM token
+                $request->user()->save();
             }
 
             return response()->json([
