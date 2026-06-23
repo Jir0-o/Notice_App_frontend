@@ -14,10 +14,37 @@
   </div>
 
   @php
-    $dateText  = \Carbon\Carbon::parse($meeting->date)->timezone('Asia/Dhaka')->format('F j, Y');
-    $startText = \Carbon\Carbon::parse($meeting->start_time)->timezone('Asia/Dhaka')->format('g:i a');
-    $endText   = \Carbon\Carbon::parse($meeting->end_time)->timezone('Asia/Dhaka')->format('g:i a');
-    $pubText   = \Carbon\Carbon::parse($meeting->updated_at)->timezone('Asia/Dhaka')->format('F j, Y, g:i a');
+    $dateText = \Carbon\Carbon::parse($meeting->date)->format('F j, Y');
+
+    $formatMeetingTime = function ($value) {
+        if (empty($value)) {
+            return '—';
+        }
+
+        if ($value instanceof \Carbon\CarbonInterface) {
+            return $value->format('g:i a');
+        }
+
+        $value = trim((string) $value);
+
+        foreach (['H:i:s', 'H:i'] as $format) {
+            try {
+                return \Carbon\Carbon::createFromFormat($format, $value)->format('g:i a');
+            } catch (\Throwable $e) {
+                // try next format
+            }
+        }
+
+        return \Carbon\Carbon::parse($value)->format('g:i a');
+    };
+
+    $startText = $formatMeetingTime($meeting->start_time);
+    $endText   = $formatMeetingTime($meeting->end_time);
+
+    // updated_at is full datetime, so timezone conversion is OK here.
+    $pubText = \Carbon\Carbon::parse($meeting->updated_at)
+        ->timezone('Asia/Dhaka')
+        ->format('F j, Y, g:i a');
 
     // OPTIONAL: if you have these fields, they'll show; otherwise ignored
     $location  = $meeting->location ?? $meeting->room_name ?? null;
