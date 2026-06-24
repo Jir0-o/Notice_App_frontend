@@ -10,57 +10,99 @@
 
   {{-- Preheader --}}
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-    New meeting: {{ $meeting->title ?? 'Meeting' }} on {{ \Carbon\Carbon::parse($meeting->date)->format('F j, Y') }}
+    New meeting: {{ $meeting->title ?? 'Meeting' }} on {{ \Carbon\Carbon::parse(method_exists($meeting, 'getRawOriginal') ? ($meeting->getRawOriginal('date') ?: $meeting->date) : $meeting->date)->format('F j, Y') }}
   </div>
 
   @php
-    $dateText = \Carbon\Carbon::parse($meeting->date)->format('F j, Y');
 
-    $formatMeetingTime = function ($value) {
-        if (empty($value)) {
-            return '—';
+    $rawValue = function ($model, string $key) {
+        if (is_object($model) && method_exists($model, 'getRawOriginal')) {
+            $raw = $model->getRawOriginal($key);
+
+            if ($raw !== null && $raw !== '') {
+                return $raw;
+            }
         }
 
-        if ($value instanceof \Carbon\CarbonInterface) {
-            return $value->format('g:i a');
+        return data_get($model, $key);
+    };
+
+    /*
+    |--------------------------------------------------------------------------
+    | Date
+    |--------------------------------------------------------------------------
+    */
+    $rawDate = $rawValue($meeting, 'date');
+    $dateText = $rawDate
+        ? \Carbon\Carbon::parse($rawDate)->format('F j, Y')
+        : '—';
+
+    $formatTimeOnly = function ($value) {
+        if ($value === null || $value === '') {
+            return '—';
         }
 
         $value = trim((string) $value);
 
+        // Sometimes raw TIME can be "14:23:00" or "14:23"
         foreach (['H:i:s', 'H:i'] as $format) {
             try {
-                return \Carbon\Carbon::createFromFormat($format, $value)->format('g:i a');
+                return \Carbon\Carbon::createFromFormat('!' . $format, $value)->format('g:i a');
             } catch (\Throwable $e) {
                 // try next format
             }
         }
 
-        return \Carbon\Carbon::parse($value)->format('g:i a');
+        // Last fallback only
+        try {
+            return \Carbon\Carbon::parse($value)->format('g:i a');
+        } catch (\Throwable $e) {
+            return $value;
+        }
     };
 
-    $startText = $formatMeetingTime($meeting->start_time);
-    $endText   = $formatMeetingTime($meeting->end_time);
+    $startText = $formatTimeOnly($rawValue($meeting, 'start_time'));
+    $endText   = $formatTimeOnly($rawValue($meeting, 'end_time'));
 
-    // updated_at is full datetime, so timezone conversion is OK here.
-    $pubText = \Carbon\Carbon::parse($meeting->updated_at)
-        ->timezone('Asia/Dhaka')
-        ->format('F j, Y, g:i a');
+    /*
+    |--------------------------------------------------------------------------
+    | Published time
+    |--------------------------------------------------------------------------
+    | updated_at is full datetime. If your DB already stores local Bangladesh time,
+    | do not timezone convert again.
+    */
+    $rawUpdatedAt = $rawValue($meeting, 'updated_at');
 
-    // OPTIONAL: if you have these fields, they'll show; otherwise ignored
-    $location  = $meeting->location ?? $meeting->room_name ?? null;
-    $agenda    = $meeting->agenda ?? $meeting->description ?? null;
+    $pubText = $rawUpdatedAt
+        ? \Carbon\Carbon::parse($rawUpdatedAt)->format('F j, Y, g:i a')
+        : '—';
 
-    // If agenda is HTML (Quill), strip tags for email text (same approach you wanted)
+    /*
+    |--------------------------------------------------------------------------
+    | Location
+    |--------------------------------------------------------------------------
+    */
+    $location = $meeting->location
+        ?? $meeting->room_name
+        ?? $meeting->meeting?->title
+        ?? null;
+
+    /*
+    |--------------------------------------------------------------------------
+    | Agenda
+    |--------------------------------------------------------------------------
+    */
+    $agenda = $meeting->agenda ?? $meeting->description ?? null;
+
     if ($agenda) {
-      $html = $agenda;
-      $html = preg_replace('/<\/(p|div|h1|h2|h3|h4|li|blockquote)>/i', "\n", $html);
-      $html = preg_replace('/<br\s*\/?>/i', "\n", $html);
-      $agenda = trim(strip_tags($html));
-      $agenda = preg_replace("/\r\n|\r/", "\n", $agenda);
-      $agenda = preg_replace("/\n{3,}/", "\n\n", $agenda);
+        $html = $agenda;
+        $html = preg_replace('/<\/(p|div|h1|h2|h3|h4|li|blockquote)>/i', "\n", $html);
+        $html = preg_replace('/<br\s*\/?>/i', "\n", $html);
+        $agenda = trim(strip_tags($html));
+        $agenda = preg_replace("/\r\n|\r/", "\n", $agenda);
+        $agenda = preg_replace("/\n{3,}/", "\n\n", $agenda);
     }
 
-    // OPTIONAL: pass $meetingUrl from Mailable if you want a button
     $meetingUrl = $meetingUrl ?? null;
   @endphp
 
@@ -93,7 +135,7 @@
                 </p>
 
                 <div style="font-size:20px;font-weight:900;color:#213b52;margin:0 0 8px 0;">
-                  {{ $meeting->title }}
+                  {{ $meeting->title ?? 'Meeting' }}
                 </div>
 
                 <div style="font-size:12px;color:#6b7280;margin:0 0 14px 0;">
