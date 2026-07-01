@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Route;
 use Carbon\Carbon;
 use App\Models\MeetingDetail;
 use App\Http\Controllers\Admin\AppUpdateController;
+use App\Http\Controllers\ContactController;
+use App\Http\Controllers\Admin\ContactMessageController;
 
 
 // Home Route
@@ -32,6 +34,33 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::delete('/app-updates/{appUpdate}', [AppUpdateController::class, 'destroy'])
         ->name('app-updates.destroy');
 });
+
+// Support page (public)
+Route::get('/contact', [ContactController::class, 'index'])
+    ->name('contact.index');
+
+Route::post('/contact-submit', [ContactController::class, 'store'])
+    ->name('contact.submit');
+
+Route::get('/contact/track/{contact_no}', [ContactController::class, 'track'])
+    ->name('api.contact.track');
+
+Route::middleware(['web'])
+    ->prefix('admin')
+    ->name('admin.')
+    ->group(function () {
+        Route::get('/contact-messages', [ContactMessageController::class, 'index'])
+            ->name('contact-messages.index');
+
+        Route::get('/contact-messages/{contactMessage}', [ContactMessageController::class, 'show'])
+            ->name('contact-messages.show');
+
+        Route::put('/contact-messages/{contactMessage}', [ContactMessageController::class, 'update'])
+            ->name('contact-messages.update');
+
+        Route::delete('/contact-messages/{contactMessage}', [ContactMessageController::class, 'destroy'])
+            ->name('contact-messages.destroy');
+    });
 
 Route::get('/login', fn () => redirect()->route('ext.login'))->name('login.form');
 // External Views

@@ -130,6 +130,14 @@
         <div data-i18n="App Update">App Update</div>
       </a>
     </li>
+
+    <!-- Contact Messages (Admin) -->
+    <li class="menu-item menu-by-role" data-role="Super Admin" id="menu-contact-messages" style="display:none;">
+      <a href="{{ route('admin.contact-messages.index') }}" class="menu-link">
+        <i class="menu-icon tf-icons bx bx-envelope"></i>
+        <div data-i18n="Contact Messages">Contact Messages</div>
+      </a>
+    </li>
   </ul>
 </aside>
 

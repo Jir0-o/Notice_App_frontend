@@ -57,32 +57,15 @@
 <body>
     <div class="font-sans text-gray-900 antialiased">
         @yield('content')
-    </div>
 
-    <footer class="guest-footer py-2">
-      <div class="container">
-        <div class="row justify-content-center">
-          {{-- match login card width --}}
-          <div class="col-lg-10 col-xl-9">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
-              <div class="text-muted small text-center text-md-start">
-                @include('backend.partials.footer')
-              </div>
-
-              <div class="small d-flex gap-3 justify-content-center">
-                <a class="text-decoration-none" href="{{ route('notice.terms.conditions') }}">
-                  Terms &amp; Conditions
-                </a>
-                <span class="text-muted">|</span>
-                <a class="text-decoration-none" href="{{ route('notice.privacy.policy') }}">
-                  Privacy Policy
-                </a>
-              </div>
-            </div>
-          </div>
+        {{-- ✅ Footer --}}
+        <div class="text-center text-muted small mt-4 guest-footer pb-3">
+            © {{ date('Y') }} <span>SICIP Notice System</span> •
+            <a href="{{ route('contact.index') }}">Support</a> •
+            <a href="{{ route('notice.privacy.policy') }}">Privacy Policy</a> •
+            <a href="{{ route('notice.terms.conditions') }}">Terms</a>
         </div>
-      </div>
-    </footer>
+    </div>
 
 
     @livewireScripts
