@@ -66,9 +66,9 @@ Route::get('/login', fn () => redirect()->route('ext.login'))->name('login.form'
 // External Views
 Route::view('/ext/login', 'frontend.ext.login')->name('ext.login');
 
-Route::get('/register', function () {
-    return view('auth.register');
-})->name('register');
+// Route::get('/register', function () {
+//     return view('auth.register');
+// })->name('register');
 
 Route::middleware('web', 'front.token')->group(function () {
 
