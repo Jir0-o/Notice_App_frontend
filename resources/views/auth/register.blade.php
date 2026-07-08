@@ -1,164 +1,324 @@
 @extends('layouts.guest')
+
 @section('content')
-    <section class="vh-100" style="background-color: #eee;">
-        <div class="container h-100">
-            <div class="row d-flex justify-content-center align-items-center h-100">
-                <div class="col-lg-12 col-xl-11">
-                    <div class="card text-black" style="border-radius: 25px;">
-                        <div class="card-body p-md-5">
-                            <div class="row justify-content-center">
-                                <div class="col-md-10 col-lg-6 col-xl-5 order-2 order-lg-1">
+<section class="min-vh-100 d-flex align-items-center py-5" style="background: linear-gradient(135deg,#f0f4ff 0%, #eaeaea 100%);">
+    <div class="container">
+        <div class="row justify-content-center align-items-center">
+            <div class="col-lg-10 col-xl-9">
 
-                                    <form method="POST" action="{{ route('register') }}" class="mx-1 mx-md-4">
-                                        @csrf
+                <div class="card shadow-lg border-0 overflow-hidden" style="border-radius: 18px;">
+                    <div class="row g-0 align-items-center">
 
-                                        <div class="divider d-flex align-items-center my-4">
-                                            <h5 class="text-center fw-bold mx-3 mb-0">Sign Up</h5>
-                                        </div>
+                        {{-- Left: Registration Form --}}
+                        <div class="col-lg-6 p-4 p-md-5 order-2 order-lg-1">
 
-                                        <div class="d-flex flex-row align-items-center mb-4">
-                                            <i class="fas fa-user fa-lg me-3 fa-fw"></i>
-                                            <div class="flex-fill mb-0">
-                                                <x-label for="name" value="{{ __('Name') }}" />
-                                                <x-input placeholder="Enter Your Name" id="name"
-                                                    class="block mt-1 w-full" type="text" name="name"
-                                                    :value="old('name')" required autofocus autocomplete="name" />
-                                            </div>
-                                        </div>
+                            <div class="text-center mb-4">
+                                <h3 class="fw-bold mb-2">Create Account</h3>
+                                <p class="text-muted mb-0 small">
+                                    Skills for Industry Competitiveness and Innovation Program
+                                </p>
+                                <p class="text-muted mb-0 small">
+                                    Admin approval is required before login.
+                                </p>
+                            </div>
 
-                                        <div class="d-flex flex-row align-items-center mb-4">
-                                            <i class="fas fa-envelope fa-lg me-3 fa-fw"></i>
-                                            <div class="flex-fill mb-0">
-                                                <x-label for="email" value="{{ __('Email') }}" />
-                                                <x-input placeholder="Enter Your Email" id="email"
-                                                    class="block mt-1 w-full" type="email" name="email"
-                                                    :value="old('email')" required autocomplete="username" />
-                                            </div>
-                                        </div>
+                            <form id="registerForm" enctype="multipart/form-data" autocomplete="off">
+                                @csrf
 
-                                        <div class="d-flex flex-row align-items-center mb-4">
-                                            <i class="fas fa-lock fa-lg me-3 fa-fw"></i>
-                                            <div class="flex-fill mb-0">
-                                                <x-label for="password" value="{{ __('Password') }}" />
-                                                <x-input placeholder="Enter Your Password" id="password"
-                                                    class="block mt-1 w-full" type="password" name="password" required
-                                                    autocomplete="new-password" />
-                                            </div>
-                                        </div>
-
-                                        <div class="d-flex flex-row align-items-center mb-4">
-                                            <i class="fas fa-key fa-lg me-3 fa-fw"></i>
-                                            <div class="flex-fill mb-0">
-                                                <x-label for="password_confirmation" value="{{ __('Confirm Password') }}" />
-                                                <x-input placeholder="rewrite Your Password" id="password_confirmation"
-                                                    class="block mt-1 w-full" type="password" name="password_confirmation"
-                                                    required autocomplete="new-password" />
-                                            </div>
-                                        </div>
-                                        <div class="d-flex flex-row align-items-center mt-2">
-                                            @if ($errors->any())
-                                                <div class="alert alert-danger">
-                                                    <ul>
-                                                        @foreach ($errors->all() as $error)
-                                                            <li>{{ $error }}</li>
-                                                        @endforeach
-                                                    </ul>
-                                                </div>
-                                            @endif
-                                        </div>
-                                        <div class="form-check d-flex justify-content-center mb-5">
-                                            <input class="form-check-input me-2" type="checkbox" value=""
-                                                id="form2Example3c" />
-                                            <label class="form-check-label" for="form2Example3">
-                                                I agree all statements in <a href="#!">Terms of service</a>
-                                            </label>
-                                        </div>
-                                        <div class="flex items-center justify-end mt-4">
-                                            <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                                href="{{ route('login') }}">
-                                                {{ __('Already registered? click to Login') }}
-                                            </a>
-
-                                            <x-button class="ms-4">
-                                                {{ __('Register') }}
-                                            </x-button>
-                                        </div>
-
-                                    </form>
-
+                                <div class="mb-3">
+                                    <label for="name" class="form-label">Full Name</label>
+                                    <input
+                                        type="text"
+                                        id="name"
+                                        name="name"
+                                        class="form-control form-control-lg"
+                                        placeholder="Enter your full name"
+                                        required>
                                 </div>
-                                <div class="col-md-10 col-lg-6 col-xl-7 d-flex align-items-center order-1 order-lg-2">
 
-                                    <img src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-registration/draw1.webp"
-                                        class="img-fluid" alt="Sample image">
-
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email</label>
+                                    <input
+                                        type="email"
+                                        id="email"
+                                        name="email"
+                                        class="form-control form-control-lg"
+                                        placeholder="Enter your email"
+                                        required>
                                 </div>
+
+                                <div class="mb-3">
+                                    <label for="phone" class="form-label">Phone</label>
+                                    <input
+                                        type="text"
+                                        id="phone"
+                                        name="phone"
+                                        class="form-control form-control-lg"
+                                        placeholder="Enter your phone number">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">Password</label>
+                                    <div class="input-group input-group-lg">
+                                        <input
+                                            type="password"
+                                            id="password"
+                                            name="password"
+                                            class="form-control"
+                                            placeholder="Enter your password"
+                                            required>
+                                        <button class="btn btn-outline-secondary toggle-password" type="button" data-target="password">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label for="password_confirmation" class="form-label">Confirm Password</label>
+                                    <div class="input-group input-group-lg">
+                                        <input
+                                            type="password"
+                                            id="password_confirmation"
+                                            name="password_confirmation"
+                                            class="form-control"
+                                            placeholder="Confirm your password"
+                                            required>
+                                        <button class="btn btn-outline-secondary toggle-password" type="button" data-target="password_confirmation">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button type="submit" id="btnRegister" class="btn btn-primary btn-lg w-100">
+                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="spin"></span>
+                                    Register
+                                </button>
+
+                                <div class="text-center mt-3">
+                                    <span class="text-muted small">Already have an account?</span>
+                                    <a href="{{ route('ext.login') }}" class="small text-success text-decoration-none fw-semibold">
+                                        Login
+                                    </a>
+                                </div>
+                            </form>
+                        </div>
+
+                        {{-- Right: Image --}}
+                        <div class="col-lg-6 bg-light text-center py-5 px-4 order-1 order-lg-2">
+                            <img
+                                src="{{ asset('images/sicip/SICIP.png') }}"
+                                alt="SICIP Program"
+                                class="img-fluid mb-3"
+                                style="max-height: 360px;">
+
+                            <div class="px-lg-4">
+                                <h5 class="fw-bold mb-2">Account Registration</h5>
+                                <p class="text-muted small mb-0">
+                                    Submit your information and wait for admin approval.
+                                </p>
                             </div>
                         </div>
+
                     </div>
                 </div>
+
             </div>
         </div>
-        @include('backend.partials.footer')
-    </section>
+    </div>
+</section>
+
+{{-- External JS --}}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+{{-- Bootstrap Icons --}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"/>
+
+{{-- SweetAlert2 --}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.5/dist/sweetalert2.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.5/dist/sweetalert2.all.min.js"></script>
+
+<script>
+    const API_BASE = '{{ rtrim(config("app.url") ?: url("/"), "/") }}/api';
+
+    function showLoadingMessage() {
+        Swal.fire({
+            title: 'Submitting Registration',
+            text: 'Please wait while we create your account.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+    }
+
+    function showSuccessMessage(message) {
+        Swal.fire({
+            icon: 'success',
+            title: 'Registration Successful',
+            text: message || 'Your account has been created. Please wait for admin approval.',
+            confirmButtonText: 'Go to Login',
+            confirmButtonColor: '#0d6efd',
+            allowOutsideClick: false
+        }).then(() => {
+            window.location.href = '{{ route("ext.login") }}';
+        });
+    }
+
+    function showErrorMessage(title, message) {
+        Swal.fire({
+            icon: 'error',
+            title: title || 'Registration Failed',
+            html: message || 'Something went wrong. Please try again.',
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#dc3545'
+        });
+    }
+
+    function showWarningMessage(message) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Check Your Information',
+            text: message,
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#ffc107'
+        });
+    }
+
+    function extractErr(xhr) {
+        if (xhr?.responseJSON?.errors) {
+            let html = '<div class="text-start"><ul class="mb-0">';
+
+            Object.values(xhr.responseJSON.errors).forEach(function(errorGroup) {
+                if (Array.isArray(errorGroup)) {
+                    errorGroup.forEach(function(error) {
+                        html += '<li>' + error + '</li>';
+                    });
+                } else {
+                    html += '<li>' + errorGroup + '</li>';
+                }
+            });
+
+            html += '</ul></div>';
+
+            return html;
+        }
+
+        if (xhr?.responseJSON?.message) {
+            return xhr.responseJSON.message;
+        }
+
+        if (xhr.status === 0) {
+            return 'Unable to connect to the server. Please check your internet connection.';
+        }
+
+        if (xhr.status === 404) {
+            return 'Registration API was not found. Please check your API route.';
+        }
+
+        if (xhr.status === 419) {
+            return 'Session expired. Please refresh the page and try again.';
+        }
+
+        if (xhr.status === 422) {
+            return 'Some information is invalid. Please check and try again.';
+        }
+
+        if (xhr.status === 500) {
+            return 'Server error occurred. Please contact administrator.';
+        }
+
+        return 'Error ' + xhr.status + '. Please try again.';
+    }
+
+    $('.toggle-password').on('click', function () {
+        const targetId = $(this).data('target');
+        const input = document.getElementById(targetId);
+
+        if (!input) return;
+
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+
+        $(this).find('i').toggleClass('bi-eye bi-eye-slash');
+    });
+
+    $('#registerForm').on('submit', function(e) {
+        e.preventDefault();
+
+        const name = $('#name').val().trim();
+        const email = $('#email').val().trim();
+        const phone = $('#phone').val().trim();
+        const password = $('#password').val();
+        const confirmPassword = $('#password_confirmation').val();
+
+        if (!name) {
+            showWarningMessage('Please enter your full name.');
+            return;
+        }
+
+        if (!email) {
+            showWarningMessage('Please enter your email address.');
+            return;
+        }
+
+        if (!password) {
+            showWarningMessage('Please enter your password.');
+            return;
+        }
+
+        if (password.length < 6) {
+            showWarningMessage('Password must be at least 6 characters.');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            showWarningMessage('Password and confirm password do not match.');
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('name', name);
+        fd.append('email', email);
+        fd.append('phone', phone);
+        fd.append('password', password);
+        fd.append('password_confirmation', confirmPassword);
+
+        $('#btnRegister').prop('disabled', true);
+        $('#spin').removeClass('d-none');
+
+        showLoadingMessage();
+
+        $.ajax({
+            url: API_BASE + '/auth/register',
+            method: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            headers: {
+                Accept: 'application/json'
+            }
+        }).done(function(resp) {
+            Swal.close();
+
+            $('#registerForm')[0].reset();
+
+            showSuccessMessage(
+                resp.message || 'Your registration has been submitted successfully. Please wait for admin approval.'
+            );
+
+        }).fail(function(xhr) {
+            Swal.close();
+
+            showErrorMessage(
+                'Registration Failed',
+                extractErr(xhr)
+            );
+
+        }).always(function() {
+            $('#btnRegister').prop('disabled', false);
+            $('#spin').addClass('d-none');
+        });
+    });
+</script>
 @endsection
-{{-- <x-guest-layout>
-    <x-authentication-card>
-        <x-slot name="logo">
-            <x-authentication-card-logo />
-        </x-slot>
-
-        <x-validation-errors class="mb-4" />
-
-        <form method="POST" action="{{ route('register') }}">
-            @csrf
-
-            <div>
-                <x-label for="name" value="{{ __('Name') }}" />
-                <x-input id="name" class="block mt-1 w-full" type="text" name="name" :value="old('name')" required autofocus autocomplete="name" />
-            </div>
-
-            <div class="mt-4">
-                <x-label for="email" value="{{ __('Email') }}" />
-                <x-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autocomplete="username" />
-            </div>
-
-            <div class="mt-4">
-                <x-label for="password" value="{{ __('Password') }}" />
-                <x-input id="password" class="block mt-1 w-full" type="password" name="password" required autocomplete="new-password" />
-            </div>
-
-            <div class="mt-4">
-                <x-label for="password_confirmation" value="{{ __('Confirm Password') }}" />
-                <x-input id="password_confirmation" class="block mt-1 w-full" type="password" name="password_confirmation" required autocomplete="new-password" />
-            </div>
-
-            @if (Laravel\Jetstream\Jetstream::hasTermsAndPrivacyPolicyFeature())
-                <div class="mt-4">
-                    <x-label for="terms">
-                        <div class="flex items-center">
-                            <x-checkbox name="terms" id="terms" required />
-
-                            <div class="ms-2">
-                                {!! __('I agree to the :terms_of_service and :privacy_policy', [
-                                        'terms_of_service' => '<a target="_blank" href="'.route('terms.show').'" class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">'.__('Terms of Service').'</a>',
-                                        'privacy_policy' => '<a target="_blank" href="'.route('policy.show').'" class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">'.__('Privacy Policy').'</a>',
-                                ]) !!}
-                            </div>
-                        </div>
-                    </x-label>
-                </div>
-            @endif
-
-            <div class="flex items-center justify-end mt-4">
-                <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('login') }}">
-                    {{ __('Already registered?') }}
-                </a>
-
-                <x-button class="ms-4">
-                    {{ __('Register') }}
-                </x-button>
-            </div>
-        </form>
-    </x-authentication-card>
-</x-guest-layout> --}}

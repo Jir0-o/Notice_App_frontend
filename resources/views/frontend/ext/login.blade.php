@@ -65,6 +65,13 @@
                   Sign In
                 </button>
 
+                <div class="text-center mt-3">
+                    <span class="text-muted small">Don't have an account?</span>
+                    <a href="{{ route('register') }}" class="btn btn-outline-primary btn-sm ms-2">
+                        Register
+                    </a>
+                </div>
+
                 {{-- <div class="text-center mt-3 small text-muted">
                   Your session token is stored securely in your browser.
                 </div> --}}
