@@ -34,6 +34,8 @@ use App\Http\Controllers\Api\V1\AppUpdateCheckController;
 Route::group(['prefix'=>'auth'], function(){
     Route::post('/register', [SanctumAuthController::class, 'store']);
     Route::post('/login', [SanctumAuthController::class, 'login'])->name('login');
+    Route::post('/forgot-password', [SanctumAuthController::class, 'forgotPassword']);
+    Route::post('/reset-password', [SanctumAuthController::class, 'resetPassword']);
     Route::post('/logout', [SanctumAuthController::class, 'logout'])->middleware('auth:sanctum')->name('logout');
 });
 
