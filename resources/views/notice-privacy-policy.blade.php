@@ -9,29 +9,36 @@
     <div class="row justify-content-center">
       <div class="col-lg-10 col-xl-9">
 
-        <p><b>Internal Communication Apps - Privacy Policy</b></p>
-        <p><b>Last Updated:</b> July 11, 2026<p>
+      <p><b>SICIP Notice Apps - Privacy Policy</b></p>
+      <p><b>Last Updated:</b> July 11, 2026</p>
 
-        <p>This privacy disclosure governs data processing architectures inside the Internal Communication Apps designed for mobile devices.</p>
+      <div>
+
+        This privacy disclosure governs the data processing architectures inside the SICIP Notice Apps designed for mobile devices.
 
         <ol>
           <li>
-            <b>Data Scope and Contextual Collection</b>
+            <b>1. Data Scope and Contextual Collection</b>
             <ul>
-              <li><b>Authentication Credentials:</b> We process encrypted administrative user profile emails to permit field officer authentication.</li>
-
-              <li><b>Operational Audit Records:</b> The system handles data explicitly related to institutional audits-specifically student attendance headcounts, facility condition logs, and compliance parameters compiled during field visits.</li>
-              <li><b>Tracking Limitation:</b> This application collects no telemetry for commercial advertising, cross-app tracking, or location brokerage profiles.</li>         
+              <li><b>Authentication Credentials:</b> We process encrypted administrative user profile emails to permit secure internal user authentication and access control.</li>
+              <li><b>Operational Communication Records:</b> The system handles data explicitly related to internal program communications-specifically official notice updates, meeting schedules, participant assignments, and metadata for document attachments downloaded by the user.</li>
+              <li><b>Tracking Limitation:</b> This application collects no telemetry for commercial advertising, cross-app tracking, or location brokerage profiles.</li>
             </ul>
           </li>
-          <li><b>Transmission Security & Isolation</b> All inspection data packages, draft items, and forms are isolated and transmitted to program databases using verified Secure Sockets Layer/Transport Layer Security (HTTPS) connections.</li>
-          <li><b>Technical Assistance Contacts</b> Authorized state monitors seeking credential help or data modification access may register inquiries directly to <a href="mailto:siddique.sicip@gmail.com">siddique.sicip@gmail.com</a> or consult our authorized tracking platform landing zone at https://note.quaarks.com/contact.</li>
+          <li><b>2. Transmission Security & Isolation</b> All notices, meeting data packages, cache profiles, and file attachments are securely isolated and transmitted to program databases using verified Secure Sockets Layer/Transport Layer Security (HTTPS) connections.</li>
+
+          <li><b>3. Technical Assistance Contacts</b>Authorized personnel seeking credential help or data modification access may register inquiries directly to siddique.sicip@gmail.com or consult our authorized platform landing zone at https://note.quaarks.com/contact.</li>
+
+            <li><b>4. Data Retention & Consent</b> User-provided data is retained exclusively to support active account verification and internal communication history. By authenticating and using the Application, you consent to the data processing parameters outlined in this policy.</li>
+
         </ol>
 
-        <p class="mb-0">
-            If you have any questions regarding privacy while using the Application, or have questions about the practices, please contact the Service Provider via email at
-            <a href="mailto:siddique.sicip@gmail.com">siddique.sicip@gmail.com</a>.
-        </p>
+      </div>
+
+      <p class="mb-0">
+          If you have any questions regarding privacy while using the Application, or have questions about the practices, please contact the Service Provider via email at
+          <a href="mailto:siddique.sicip@gmail.com">siddique.sicip@gmail.com</a>.
+      </p>
       </div>
 
 
