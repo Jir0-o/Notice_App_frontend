@@ -334,7 +334,7 @@
                 <div class="info-icon">📧</div>
                 <div>
                     <div class="info-label">Email</div>
-                    <div class="info-value">info@sicip.gov.bd</div>
+                    <div class="info-value">siddique.sicip@gmail.com</div>
                 </div>
             </div>
 
