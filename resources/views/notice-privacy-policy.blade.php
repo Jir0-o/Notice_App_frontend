@@ -9,10 +9,10 @@
     <div class="row justify-content-center">
       <div class="col-lg-10 col-xl-9">
 
-        <b>Internal Communication Apps - Privacy Policy</b>
-        <b>Last Updated:</b> July 11, 2026
+        <p><b>Internal Communication Apps - Privacy Policy</b></p>
+        <p><b>Last Updated:</b> July 11, 2026<p>
 
-        This privacy disclosure governs data processing architectures inside the Internal Communication Apps designed for mobile devices.
+        <p>This privacy disclosure governs data processing architectures inside the Internal Communication Apps designed for mobile devices.</p>
 
         <ol>
           <li>
